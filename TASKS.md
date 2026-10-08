@@ -19,7 +19,7 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Create the Python virtual environment (`.venv/`)
 - [x] Create the local `.env` file (git-ignored)
 - [x] Make the first commit
-- [ ] Create the GitHub repository and push
+- [x] Create the GitHub repository and push
 
 ## Phase 2 — Minimal FastAPI backend scaffold
 
