@@ -60,18 +60,18 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 
 ## Phase 5 — SQL validator and tests
 
-- [ ] Add SQLGlot and pytest to the requirements
-- [ ] Create the validator as a pure function: SQL string in → approved (possibly rewritten) SQL or a rejection reason out
-- [ ] Rule 1: reject more than one statement
-- [ ] Rule 2: allow only `SELECT` (including `WITH ... SELECT`); reject all write/DDL statements, including inside CTEs
-- [ ] Rule 3: allow only the six known tables; reject `pg_catalog`, `information_schema` and other schemas
-- [ ] Rule 4: reject dangerous functions (e.g. `pg_sleep`, `pg_read_file`, `lo_import`, `dblink`)
-- [ ] Rule 5: add a `LIMIT` if missing, and cap it if it is too large
-- [ ] Rule 6: fail closed when SQL cannot be parsed or confirmed safe
-- [ ] Write tests in `tests/` for allowed queries (simple select, joins, aggregates, CTEs)
-- [ ] Write tests in `tests/` for blocked queries (one or more per rule)
-- [ ] All validator tests pass
-- [ ] Commit: SQL validator and tests
+- [x] Add SQLGlot and pytest to the requirements
+- [x] Create the validator as a pure function: SQL string in → approved (possibly rewritten) SQL or a rejection reason out
+- [x] Rule 1: reject more than one statement
+- [x] Rule 2: allow only `SELECT` (including `WITH ... SELECT`); reject all write/DDL statements, including inside CTEs
+- [x] Rule 3: allow only the six known tables; reject `pg_catalog`, `information_schema` and other schemas
+- [x] Rule 4: reject dangerous functions (e.g. `pg_sleep`, `pg_read_file`, `lo_import`, `dblink`)
+- [x] Rule 5: add a `LIMIT` if missing, and cap it if it is too large
+- [x] Rule 6: fail closed when SQL cannot be parsed or confirmed safe
+- [x] Write tests in `tests/` for allowed queries (simple select, joins, aggregates, CTEs)
+- [x] Write tests in `tests/` for blocked queries (one or more per rule)
+- [x] All validator tests pass
+- [x] Commit: SQL validator and tests
 
 ## Phase 6 — Database executor and connection
 
