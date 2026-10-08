@@ -88,15 +88,15 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 
 ## Phase 7 — Gemini NL-to-SQL integration
 
-- [ ] Get a Gemini API key and store it in `.env`
-- [ ] Add the Gemini SDK to the requirements
-- [ ] Create the LLM service module (the only module that talks to Gemini)
-- [ ] Write the schema context: six tables, columns and relationships
-- [ ] Add the Business Metric Definitions (Completed Order, Successful Payment, Revenue, Profit, AOV) to the prompt
-- [ ] Write the NL → SQL prompt: PostgreSQL `SELECT` only, with the user's question treated as data
-- [ ] Extract clean SQL from the model response (e.g. strip markdown code fences)
-- [ ] Try a handful of example questions and check that the generated SQL looks correct
-- [ ] Commit: Gemini NL → SQL service
+- [x] Get a Gemini API key and store it in `.env`
+- [x] Add the Gemini SDK to the requirements
+- [x] Create the LLM service module (the only module that talks to Gemini)
+- [x] Write the schema context: six tables, columns and relationships
+- [x] Add the Business Metric Definitions (Completed Order, Successful Payment, Revenue, Profit, AOV) to the prompt
+- [x] Write the NL → SQL prompt: PostgreSQL `SELECT` only, with the user's question treated as data
+- [x] Extract clean SQL from the model response (e.g. strip markdown code fences)
+- [x] Try a handful of example questions and check that the generated SQL looks correct
+- [x] Commit: Gemini NL → SQL service
 
 ## Phase 8 — Query pipeline and API endpoint
 

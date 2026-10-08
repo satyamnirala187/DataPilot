@@ -26,5 +26,9 @@ class Settings(BaseSettings):
     query_timeout_ms: int = 5000
     max_result_rows: int = 500
 
+    # Gemini, used to turn questions into SQL. The key is a SecretStr so it never appears in logs.
+    gemini_api_key: SecretStr | None = None
+    gemini_model: str = "gemini-3.8-flash"
+
 
 settings = Settings()
