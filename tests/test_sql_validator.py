@@ -307,3 +307,199 @@ def test_malformed_sql_is_blocked(sql):
 def test_empty_input_is_blocked(sql):
     with pytest.raises(UnsafeSQLError):
         validate_sql(sql)
+
+
+# --- SQLGlot-specific edge cases ---------------------------------------------------------
+# These pin down how SQLGlot represents tricky PostgreSQL syntax, so a SQLGlot upgrade that
+# changes the parse tree shows up as a failing test instead of a silent security gap.
+
+import sqlglot  # noqa: E402
+from sqlglot import exp  # noqa: E402
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT * INTO stolen FROM customers",
+    "SELECT * INTO TEMP stolen FROM customers",
+    "SELECT * INTO UNLOGGED TABLE stolen FROM customers",
+    "SELECT customer_id INTO stolen FROM customers WHERE city = 'Pune' ORDER BY 1",
+])
+def test_every_form_of_select_into_is_blocked(sql):
+    assert_blocked(sql, "INTO is not allowed")
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT * FROM orders FOR UPDATE",
+    "SELECT * FROM orders FOR NO KEY UPDATE",
+    "SELECT * FROM orders FOR SHARE",
+    "SELECT * FROM orders FOR KEY SHARE",
+    "SELECT * FROM orders FOR UPDATE SKIP LOCKED",
+    "SELECT * FROM (SELECT * FROM orders FOR UPDATE) AS locked",
+])
+def test_every_row_locking_clause_is_blocked(sql):
+    assert_blocked(sql, "LOCK is not allowed")
+
+
+def test_limit_all_is_replaced_with_custom_maximum():
+    assert limit_of(validate_sql("SELECT * FROM orders LIMIT ALL", max_limit=25)) == "LIMIT 25"
+
+
+def test_limit_all_on_a_union_is_replaced():
+    result = validate_sql("SELECT city FROM customers UNION SELECT name FROM categories LIMIT ALL")
+    assert result.endswith(f"LIMIT {MAX_LIMIT}") and "ALL" not in result
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT * FROM generate_series(1, 10)",
+    "SELECT * FROM unnest(ARRAY[1, 2, 3])",
+    "SELECT * FROM pg_ls_dir('.')",
+    "SELECT * FROM json_to_recordset('[{\"a\": 1}]') AS t(a INT)",
+    "SELECT * FROM customers CROSS JOIN LATERAL generate_series(1, 3) AS g",
+    "SELECT * FROM dblink('host=evil.example', 'SELECT 1') AS t(x INT)",
+])
+def test_no_function_is_allowed_as_a_table_source(sql):
+    # No table-producing function is on a safe list in v1, so all of them are rejected.
+    with pytest.raises(UnsafeSQLError):
+        validate_sql(sql)
+
+
+@pytest.mark.parametrize("name", ["pg_sleep", "pg_read_file", "lo_import", "dblink"])
+def test_dangerous_functions_parse_as_anonymous_and_are_blocked(name):
+    parsed = sqlglot.parse_one(f"SELECT {name}('x')", read="postgres")
+    assert isinstance(parsed.find(exp.Func), exp.Anonymous)  # SQLGlot has no class for them
+    assert_blocked(f"SELECT {name}('x')", f"Function '{name}' is not allowed")
+
+
+@pytest.mark.parametrize("sql, name", [
+    ("SELECT AGE(DATE '2026-09-30', signup_date) FROM customers", "age"),
+    ("SELECT MAKE_DATE(2026, 9, 30)", "make_date"),
+    ("SELECT EVERY(stock_quantity > 0) FROM products", "every"),
+])
+def test_safe_postgres_functions_parsed_as_anonymous_are_allowed(sql, name):
+    parsed = sqlglot.parse_one(sql, read="postgres")
+    anonymous = [f.name.lower() for f in parsed.find_all(exp.Anonymous)]
+    assert name in anonymous  # SQLGlot has no class for them either
+    assert validate_sql(sql)
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT clock_timestamp()",
+    "SELECT inet_client_addr()",
+    "SELECT json_build_object('id', customer_id) FROM customers",
+])
+def test_anonymous_functions_not_on_the_safe_list_are_blocked(sql):
+    assert_blocked(sql, "not recognised as safe")
+
+
+# --- Query shapes ----------------------------------------------------------------------
+
+def test_nested_subqueries_are_allowed():
+    sql = """
+        SELECT full_name FROM customers
+        WHERE customer_id IN (
+            SELECT customer_id FROM orders
+            WHERE order_id IN (
+                SELECT order_id FROM order_items
+                WHERE product_id IN (SELECT product_id FROM products WHERE price > 10000)))
+    """
+    assert validate_sql(sql).endswith(f"LIMIT {MAX_LIMIT}")
+
+
+def test_forbidden_table_deep_inside_nested_subqueries_is_blocked():
+    sql = """
+        SELECT * FROM customers WHERE customer_id IN (
+            SELECT customer_id FROM orders WHERE order_id IN (
+                SELECT order_id FROM order_items WHERE product_id IN (SELECT usesysid FROM pg_user)))
+    """
+    assert_blocked(sql, "Table 'pg_user' is not allowed")
+
+
+@pytest.mark.parametrize("operator", ["UNION", "UNION ALL", "INTERSECT", "EXCEPT"])
+def test_set_operations_are_allowed(operator):
+    result = validate_sql(f"SELECT city FROM customers {operator} SELECT name FROM categories")
+    assert operator in result and result.endswith(f"LIMIT {MAX_LIMIT}")
+
+
+@pytest.mark.parametrize("sql, reason", [
+    ("SELECT city FROM customers UNION ALL SELECT usename FROM pg_user", "Table 'pg_user'"),
+    ("SELECT city FROM customers UNION SELECT table_name FROM information_schema.tables", "Schema 'information_schema'"),
+    ("SELECT 1 FROM customers UNION ALL SELECT pg_sleep(5)", "Function 'pg_sleep'"),
+])
+def test_unsafe_second_branch_of_a_union_is_blocked(sql, reason):
+    assert_blocked(sql, reason)
+
+
+@pytest.mark.parametrize("sql", [
+    "-- monthly revenue\nSELECT * FROM orders",
+    "/* generated by the model */ SELECT * FROM orders",
+    "/* a */ -- b\n/* c */ SELECT * FROM orders",
+])
+def test_comments_before_sql_are_allowed_and_removed(sql):
+    result = validate_sql(sql)
+    assert result == f"SELECT * FROM orders LIMIT {MAX_LIMIT}"
+
+
+def test_semicolon_and_trailing_comment_after_a_valid_query():
+    assert validate_sql("SELECT * FROM orders; -- done") == f"SELECT * FROM orders LIMIT {MAX_LIMIT}"
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT * FROM orders;DELETE FROM orders",
+    "SELECT * FROM orders; /* harmless? */ DELETE FROM orders;",
+    "SELECT 1 FROM customers;\nSELECT 2 FROM customers",
+])
+def test_statements_separated_by_semicolons_are_blocked(sql):
+    assert_blocked(sql, "exactly one SQL statement")
+
+
+# --- Quoted identifiers and schema qualification ---------------------------------------
+# Decision: public.<allowed table> is allowed (it is the same table); every other schema is
+# rejected. Identifiers follow PostgreSQL rules: unquoted names are case-insensitive, quoted
+# names are case-sensitive, so "Customers" is a different (non-allowed) table.
+
+@pytest.mark.parametrize("sql", [
+    'SELECT "full_name", "city" FROM "customers"',
+    'SELECT * FROM "public"."customers"',
+    "SELECT * FROM public.customers",
+    "SELECT * FROM PUBLIC.Customers",
+    'SELECT o."order_id" FROM "orders" AS o JOIN public.order_items oi ON oi.order_id = o.order_id',
+    'WITH "Recent" AS (SELECT * FROM orders WHERE order_date > DATE \'2026-09-01\') SELECT * FROM "Recent"',
+])
+def test_quoted_and_public_qualified_names_are_allowed(sql):
+    assert validate_sql(sql)
+
+
+@pytest.mark.parametrize("sql, reason", [
+    ('SELECT * FROM "Customers"', "Table 'Customers' is not allowed"),
+    ('SELECT * FROM "ORDERS"', "Table 'ORDERS' is not allowed"),
+    ('SELECT * FROM "PUBLIC".customers', "Schema 'PUBLIC' is not allowed"),
+    ("SELECT * FROM public.secrets", "Table 'secrets' is not allowed"),
+    ("SELECT * FROM public.pg_user", "Table 'pg_user' is not allowed"),
+    # Quoted CTE "Recent" does not match unquoted recent, which PostgreSQL reads as a real table.
+    ('WITH "Recent" AS (SELECT 1) SELECT * FROM recent', "Table 'recent' is not allowed"),
+])
+def test_case_sensitive_quoted_names_follow_postgres_rules(sql, reason):
+    assert_blocked(sql, reason)
+
+
+# --- What may appear in FROM / JOIN ----------------------------------------------------
+
+def test_lateral_subquery_is_allowed():
+    sql = """
+        SELECT c.full_name, last_order.order_date
+        FROM customers c
+        CROSS JOIN LATERAL (
+            SELECT o.order_date FROM orders o WHERE o.customer_id = c.customer_id
+            ORDER BY o.order_date DESC LIMIT 1) AS last_order
+    """
+    assert validate_sql(sql)
+
+
+@pytest.mark.parametrize("sql, reason", [
+    ("SELECT * FROM unnest(ARRAY[1, 2, 3])", "got UNNEST"),
+    ("SELECT * FROM customers, unnest(ARRAY[1]) AS u", "got UNNEST"),
+    ("SELECT * FROM customers CROSS JOIN LATERAL generate_series(1, 3) AS g", "got EXPLODINGGENERATESERIES"),
+    ("SELECT * FROM (VALUES (1), (2)) AS v(x)", "got VALUES"),
+    ("SELECT * FROM ROWS FROM (generate_series(1, 3))", "Functions are not allowed as a table source"),
+])
+def test_non_table_row_sources_are_blocked(sql, reason):
+    assert_blocked(sql, reason)

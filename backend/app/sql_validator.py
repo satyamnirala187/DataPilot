@@ -62,7 +62,9 @@ def _parse_single_statement(sql: str) -> exp.Expression:
     if not sql or not sql.strip():
         raise UnsafeSQLError("Empty SQL.")
     try:
-        statements = [s for s in sqlglot.parse(sql, read="postgres") if s is not None]
+        statements = sqlglot.parse(sql, read="postgres")
+        # Ignore empty statements (";;") and comment-only ones ("SELECT 1; -- done").
+        statements = [s for s in statements if s is not None and not isinstance(s, exp.Semicolon)]
     except Exception as error:  # rule 6: anything the parser cannot handle is rejected
         raise UnsafeSQLError("SQL could not be parsed.") from error
     if len(statements) != 1:
@@ -81,12 +83,28 @@ def _check_read_only(statement: exp.Expression) -> None:
             raise UnsafeSQLError(f"{node.key.upper()} is not allowed in a read-only query.")
 
 
+def _identifier_name(identifier: exp.Expression | None) -> str:
+    """Name as PostgreSQL resolves it: unquoted names are lowercased, quoted names keep their case."""
+    if identifier is None:
+        return ""
+    return identifier.name if identifier.args.get("quoted") else identifier.name.lower()
+
+
 def _check_tables(statement: exp.Expression) -> None:
+    # Everything in FROM / JOIN must be a table or a subquery (optionally LATERAL). This rejects
+    # row-producing functions such as unnest(...), LATERAL generate_series(...) and VALUES lists.
+    for clause in [*statement.find_all(exp.From), *statement.find_all(exp.Join)]:
+        source = clause.this
+        if isinstance(source, exp.Lateral):
+            source = source.this
+        if not isinstance(source, (exp.Table, exp.Subquery)):
+            raise UnsafeSQLError(f"Only tables and subqueries are allowed in FROM, got {source.key.upper()}.")
+
     for table in statement.find_all(exp.Table):
         if not isinstance(table.this, exp.Identifier):
             raise UnsafeSQLError("Functions are not allowed as a table source.")
-        name = table.name.lower()
-        schema = table.db.lower()
+        name = _identifier_name(table.this)
+        schema = _identifier_name(table.args.get("db"))
         if table.catalog or schema not in ALLOWED_SCHEMAS:
             raise UnsafeSQLError(f"Schema '{table.catalog or table.db}' is not allowed.")
         if name in ALLOWED_TABLES:
@@ -109,13 +127,17 @@ def _visible_cte_names(table: exp.Table) -> set[str]:
             ctes = node.expressions
             position = next(i for i, cte in enumerate(ctes) if cte is child)
             visible = ctes[: position + 1] if node.args.get("recursive") else ctes[:position]
-            names.update(cte.alias.lower() for cte in visible)
+            names.update(_cte_name(cte) for cte in visible)
         else:
             with_clause = node.args.get(WITH_KEY)
             if with_clause is not None and with_clause is not child:
-                names.update(cte.alias.lower() for cte in with_clause.expressions)
+                names.update(_cte_name(cte) for cte in with_clause.expressions)
         child, node = node, node.parent
     return names
+
+
+def _cte_name(cte: exp.CTE) -> str:
+    return _identifier_name(cte.args["alias"].this)
 
 
 def _check_functions(statement: exp.Expression) -> None:
