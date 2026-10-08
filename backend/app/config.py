@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # .env lives at the project root: DataPilot/.env
@@ -17,6 +18,13 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "DataPilot API"
+
+    # Read-only role used for every user query. The admin DATABASE_URL is deliberately not
+    # defined here: it is only for the setup scripts in database/. SecretStr keeps the value
+    # out of logs and error messages.
+    readonly_database_url: SecretStr | None = None
+    query_timeout_ms: int = 5000
+    max_result_rows: int = 500
 
 
 settings = Settings()

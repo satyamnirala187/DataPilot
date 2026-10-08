@@ -75,16 +75,16 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 
 ## Phase 6 — Database executor and connection
 
-- [ ] Write SQL in `database/` that creates a read-only role with `SELECT` on the six tables only
-- [ ] Apply it to Supabase and confirm that writes fail when connected as that role
-- [ ] Store the read-only connection string in `.env`
-- [ ] Create the DB executor module that connects as the read-only role
-- [ ] Run every query inside a read-only transaction
-- [ ] Set a short statement timeout on each query
-- [ ] Enforce a maximum number of returned rows
-- [ ] Return column names and rows in a JSON-friendly form (dates, decimals)
-- [ ] Manually run a few approved queries through the executor
-- [ ] Commit: DB executor
+- [x] Write SQL in `database/` that creates a read-only role with `SELECT` on the six tables only
+- [x] Apply it to Supabase and confirm that writes fail when connected as that role
+- [x] Store the read-only connection string in `.env`
+- [x] Create the DB executor module that connects as the read-only role
+- [x] Run every query inside a read-only transaction
+- [x] Set a short statement timeout on each query
+- [x] Enforce a maximum number of returned rows
+- [x] Return column names and rows in a JSON-friendly form (dates, decimals)
+- [x] Manually run a few approved queries through the executor
+- [x] Commit: DB executor
 
 ## Phase 7 — Gemini NL-to-SQL integration
 
