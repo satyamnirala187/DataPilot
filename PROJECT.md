@@ -205,6 +205,8 @@ These rules give the LLM consistent business semantics. They are included in the
 
 The exact status values must match these definitions when the schema is written in `database/`.
 
+**Dataset reference date.** The synthetic dataset's reference date is **2026-09-30**, the last day of its fixed date window. For relative-time questions such as "last 30 days", "this month" or "last quarter", the NL-to-SQL prompt should interpret "today" as this reference date rather than PostgreSQL `CURRENT_DATE`.
+
 ---
 
 ## 8. Initial Feature Scope (Version 1)

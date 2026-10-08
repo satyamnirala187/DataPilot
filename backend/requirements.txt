@@ -2,3 +2,4 @@ fastapi==0.143.0
 uvicorn==0.54.0
 pydantic-settings==2.15.0
 psycopg[binary]==3.3.6
+faker==40.41.0

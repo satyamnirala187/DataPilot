@@ -45,18 +45,18 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 
 ## Phase 4 — Faker seed data
 
-- [ ] Add Faker and a PostgreSQL driver to the requirements
-- [ ] Create `database/seed.py` with a fixed random seed so the dataset is reproducible
-- [ ] Make the seed script safe to re-run (clear existing rows before inserting)
-- [ ] Generate categories (e.g. Electronics, Apparel, Home)
-- [ ] Generate 100–200 products with a price, a cost lower than the price, and stock
-- [ ] Generate about 1,000 customers with name, email, city, state/country and signup date
-- [ ] Generate a few thousand orders with dates spread over about two years and a mix of statuses
-- [ ] Generate order items with product, quantity, `unit_price` and `unit_cost` (both captured at the time of the order)
-- [ ] Generate payments with varied methods and statuses that are consistent with each order's status
-- [ ] Run the seed script against Supabase
-- [ ] Check row counts and run hand-written SQL for Revenue, Profit and AOV to confirm the data looks realistic
-- [ ] Commit: seed data
+- [x] Add Faker and a PostgreSQL driver to the requirements
+- [x] Create `database/seed.py` with a fixed random seed so the dataset is reproducible
+- [x] Make the seed script safe to re-run (clear existing rows before inserting)
+- [x] Generate categories (e.g. Electronics, Apparel, Home)
+- [x] Generate 100–200 products with a price, a cost lower than the price, and stock
+- [x] Generate about 1,000 customers with name, email, city, state/country and signup date
+- [x] Generate a few thousand orders with dates spread over about two years and a mix of statuses
+- [x] Generate order items with product, quantity, `unit_price` and `unit_cost` (both captured at the time of the order)
+- [x] Generate payments with varied methods and statuses that are consistent with each order's status
+- [x] Run the seed script against Supabase
+- [x] Check row counts and run hand-written SQL for Revenue, Profit and AOV to confirm the data looks realistic
+- [x] Commit: seed data
 
 ## Phase 5 — SQL validator and tests
 
