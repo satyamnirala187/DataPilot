@@ -1,0 +1,208 @@
+# DataPilot — Implementation Roadmap (v1)
+
+This is the step-by-step build plan for DataPilot v1. It is based strictly on [PROJECT.md](PROJECT.md), which remains the single source of truth for scope.
+
+**How to use this file**
+
+- Work through the phases in order. Each phase should work end to end before the next one starts.
+- Tick tasks off as they are finished and commit with a clear message at the end of each phase.
+- If a task requires a scope change, update PROJECT.md first.
+
+---
+
+## Phase 1 — Environment and project setup
+
+- [x] Write the PROJECT.md specification
+- [x] Initialize the git repository
+- [x] Create the folder structure (`backend/`, `frontend/`, `database/`, `docs/`, `tests/`)
+- [x] Add `.gitignore` (`.venv/`, `.env`, `__pycache__/`, `node_modules/`, `dist/`, `.DS_Store`)
+- [x] Create the Python virtual environment (`.venv/`)
+- [x] Create the local `.env` file (git-ignored)
+- [x] Make the first commit
+- [ ] Create the GitHub repository and push
+
+## Phase 2 — Minimal FastAPI backend scaffold
+
+- [ ] Add `backend/requirements.txt` with FastAPI and Uvicorn
+- [ ] Install backend dependencies into `.venv`
+- [ ] Create the FastAPI application entry point in `backend/`
+- [ ] Add a settings module that reads configuration from environment variables
+- [ ] Add a `GET /health` endpoint that returns a simple status response
+- [ ] Run the app locally with Uvicorn and check `/health` and the auto-generated `/docs`
+- [ ] Commit: backend scaffold
+
+## Phase 3 — PostgreSQL schema
+
+- [ ] Create the Supabase project to use as the PostgreSQL database
+- [ ] Store the database connection string in `.env`
+- [ ] Write `database/schema.sql` with the six tables: `customers`, `categories`, `products`, `orders`, `order_items`, `payments`
+- [ ] Add primary keys, foreign keys and sensible constraints (e.g. non-negative prices and quantities)
+- [ ] Use clear, self-explanatory column names
+- [ ] Define the order status values so that `delivered` is the Completed Order status (plus e.g. `cancelled` and `returned`)
+- [ ] Define the payment status values so that `completed` is the Successful Payment status (plus e.g. `failed`, `pending` and `refunded`)
+- [ ] Apply the schema to Supabase and check that all six tables and relationships exist
+- [ ] Commit: database schema
+
+## Phase 4 — Faker seed data
+
+- [ ] Add Faker and a PostgreSQL driver to the requirements
+- [ ] Create `database/seed.py` with a fixed random seed so the dataset is reproducible
+- [ ] Make the seed script safe to re-run (clear existing rows before inserting)
+- [ ] Generate categories (e.g. Electronics, Apparel, Home)
+- [ ] Generate 100–200 products with a price, a cost lower than the price, and stock
+- [ ] Generate about 1,000 customers with name, email, city, state/country and signup date
+- [ ] Generate a few thousand orders with dates spread over about two years and a mix of statuses
+- [ ] Generate order items with product, quantity and unit price
+- [ ] Generate payments with varied methods and statuses that are consistent with each order's status
+- [ ] Run the seed script against Supabase
+- [ ] Check row counts and run hand-written SQL for Revenue, Profit and AOV to confirm the data looks realistic
+- [ ] Commit: seed data
+
+## Phase 5 — SQL validator and tests
+
+- [ ] Add SQLGlot and pytest to the requirements
+- [ ] Create the validator as a pure function: SQL string in → approved (possibly rewritten) SQL or a rejection reason out
+- [ ] Rule 1: reject more than one statement
+- [ ] Rule 2: allow only `SELECT` (including `WITH ... SELECT`); reject all write/DDL statements, including inside CTEs
+- [ ] Rule 3: allow only the six known tables; reject `pg_catalog`, `information_schema` and other schemas
+- [ ] Rule 4: reject dangerous functions (e.g. `pg_sleep`, `pg_read_file`, `lo_import`, `dblink`)
+- [ ] Rule 5: add a `LIMIT` if missing, and cap it if it is too large
+- [ ] Rule 6: fail closed when SQL cannot be parsed or confirmed safe
+- [ ] Write tests in `tests/` for allowed queries (simple select, joins, aggregates, CTEs)
+- [ ] Write tests in `tests/` for blocked queries (one or more per rule)
+- [ ] All validator tests pass
+- [ ] Commit: SQL validator and tests
+
+## Phase 6 — Database executor and connection
+
+- [ ] Write SQL in `database/` that creates a read-only role with `SELECT` on the six tables only
+- [ ] Apply it to Supabase and confirm that writes fail when connected as that role
+- [ ] Store the read-only connection string in `.env`
+- [ ] Create the DB executor module that connects as the read-only role
+- [ ] Run every query inside a read-only transaction
+- [ ] Set a short statement timeout on each query
+- [ ] Enforce a maximum number of returned rows
+- [ ] Return column names and rows in a JSON-friendly form (dates, decimals)
+- [ ] Manually run a few approved queries through the executor
+- [ ] Commit: DB executor
+
+## Phase 7 — Gemini NL-to-SQL integration
+
+- [ ] Get a Gemini API key and store it in `.env`
+- [ ] Add the Gemini SDK to the requirements
+- [ ] Create the LLM service module (the only module that talks to Gemini)
+- [ ] Write the schema context: six tables, columns and relationships
+- [ ] Add the Business Metric Definitions (Completed Order, Successful Payment, Revenue, Profit, AOV) to the prompt
+- [ ] Write the NL → SQL prompt: PostgreSQL `SELECT` only, with the user's question treated as data
+- [ ] Extract clean SQL from the model response (e.g. strip markdown code fences)
+- [ ] Try a handful of example questions and check that the generated SQL looks correct
+- [ ] Commit: Gemini NL → SQL service
+
+## Phase 8 — Query pipeline and API endpoint
+
+- [ ] Create the query pipeline: generate → validate → execute
+- [ ] Add a Pydantic request model with a maximum question length
+- [ ] Add a Pydantic response model (generated SQL, columns, rows)
+- [ ] Add the query endpoint to FastAPI that calls the pipeline
+- [ ] Return a clear error when the validator rejects SQL
+- [ ] Test the endpoint end to end from `/docs`
+- [ ] Commit: query pipeline and endpoint
+
+## Phase 9 — Minimal React frontend
+
+- [ ] Create the React + Vite app in `frontend/`
+- [ ] Read the backend URL from a frontend environment variable
+- [ ] Allow the local frontend origin in the backend CORS settings
+- [ ] Add the question input and submit button
+- [ ] Call the backend and show a loading state
+- [ ] Show the generated SQL
+- [ ] Show the results table
+- [ ] Add clickable example questions
+- [ ] Show error messages returned by the backend
+- [ ] Commit: minimal frontend
+
+## Phase 10 — Charts and business insight
+
+- [ ] Install Recharts
+- [ ] Implement the deterministic chart selection rules in application code (not the LLM):
+  - [ ] Single aggregate value → KPI
+  - [ ] Category + numeric value → bar chart
+  - [ ] Date/time + numeric value → line chart
+  - [ ] Otherwise → table only
+- [ ] Add the KPI display
+- [ ] Add the bar chart
+- [ ] Add the line chart
+- [ ] Add the insight prompt to the LLM service, based on the question and the returned rows
+- [ ] Add the summarize step to the pipeline and include the insight in the API response
+- [ ] Add the insight panel to the frontend
+- [ ] Commit: charts and insight
+
+## Phase 11 — Error handling and security hardening
+
+- [ ] Friendly errors for: invalid question, rejected SQL, query timeout, no results
+- [ ] Add a global error handler so stack traces, credentials and internal details are never returned
+- [ ] Restrict CORS to the deployed frontend origin plus localhost (from configuration)
+- [ ] Add basic per-client rate limiting
+- [ ] Confirm the question length limit and Pydantic validation on all request bodies
+- [ ] Try prompt-injection style questions and confirm the validator and read-only role still block unsafe SQL
+- [ ] Confirm that no secrets are committed to the repository
+- [ ] Review all 15 Security Requirements in PROJECT.md and tick each one off
+- [ ] Commit: error handling and security hardening
+
+## Phase 12 — Testing and benchmark questions
+
+- [ ] Write a benchmark list of example business questions covering rankings, totals, trends and comparisons
+- [ ] Include questions that use each business metric (Revenue, Profit, AOV, Completed Order, Successful Payment)
+- [ ] Write the expected answer for each benchmark question using hand-written SQL
+- [ ] Run every benchmark question through the app and record pass/fail
+- [ ] Improve the schema context or prompt for the failing questions and re-run
+- [ ] Check that each chart rule is triggered by at least one benchmark question
+- [ ] Manually test each error case (bad question, rejected SQL, timeout, empty results)
+- [ ] Confirm that the validator tests cover both allowed and blocked cases and all pass
+- [ ] Commit: benchmark questions and results
+
+## Phase 13 — Deployment
+
+- [ ] Confirm that the Supabase database has the schema, seed data and read-only role
+- [ ] Deploy the backend to Render
+- [ ] Set backend environment variables in Render (Gemini key, read-only database URL, allowed frontend origin)
+- [ ] Check `/health` on the Render URL
+- [ ] Deploy the frontend to Vercel with the backend URL configured
+- [ ] Set the backend CORS origin to the Vercel URL
+- [ ] Test the full flow on the public URL
+- [ ] Confirm that the frontend bundle contains no secrets
+- [ ] Commit: deployment configuration
+
+## Phase 14 — Final UI polish
+
+- [ ] Clean layout and consistent styling across all panels
+- [ ] Polished loading states
+- [ ] Polished error and empty-result states
+- [ ] Readable SQL viewer
+- [ ] Responsive design (desktop and mobile widths)
+- [ ] Redeploy and check the live site
+- [ ] Commit: UI polish
+
+## Phase 15 — README, diagrams, demo and resume presentation
+
+- [ ] Write the README: what DataPilot is, how it works, how to run it locally
+- [ ] Add screenshots or a demo to the README
+- [ ] Create the architecture diagram in `docs/`
+- [ ] Document the safety model (validator rules + read-only database layer) in `docs/`
+- [ ] Add the benchmark results to `docs/`
+- [ ] Record a short demo video or GIF
+- [ ] Write resume bullet points and a short project summary
+- [ ] Practise explaining the architecture, safety model and design decisions without notes
+- [ ] Final check against the Definition of a Successful Final Product (PROJECT.md §12)
+
+---
+
+## Nice to have (only after all phases above are complete)
+
+From PROJECT.md §8. Do not start these until v1 is finished.
+
+- [ ] Session-level query history in the UI
+- [ ] Schema browser panel showing the tables and columns
+- [ ] Copy SQL / export results as CSV
+- [ ] Manual chart-type toggle
+- [ ] Light/dark theme
