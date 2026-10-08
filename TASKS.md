@@ -23,13 +23,13 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 
 ## Phase 2 — Minimal FastAPI backend scaffold
 
-- [ ] Add `backend/requirements.txt` with FastAPI and Uvicorn
-- [ ] Install backend dependencies into `.venv`
-- [ ] Create the FastAPI application entry point in `backend/`
-- [ ] Add a settings module that reads configuration from environment variables
-- [ ] Add a `GET /health` endpoint that returns a simple status response
-- [ ] Run the app locally with Uvicorn and check `/health` and the auto-generated `/docs`
-- [ ] Commit: backend scaffold
+- [x] Add `backend/requirements.txt` with FastAPI and Uvicorn
+- [x] Install backend dependencies into `.venv`
+- [x] Create the FastAPI application entry point in `backend/`
+- [x] Add a settings module that reads configuration from environment variables
+- [x] Add a `GET /health` endpoint that returns a simple status response
+- [x] Run the app locally with Uvicorn and check `/health` and the auto-generated `/docs`
+- [x] Commit: backend scaffold
 
 ## Phase 3 — PostgreSQL schema
 
