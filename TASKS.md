@@ -33,15 +33,15 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 
 ## Phase 3 — PostgreSQL schema
 
-- [ ] Create the Supabase project to use as the PostgreSQL database
-- [ ] Store the database connection string in `.env`
-- [ ] Write `database/schema.sql` with the six tables: `customers`, `categories`, `products`, `orders`, `order_items`, `payments`
-- [ ] Add primary keys, foreign keys and sensible constraints (e.g. non-negative prices and quantities)
-- [ ] Use clear, self-explanatory column names
-- [ ] Define the order status values so that `delivered` is the Completed Order status (plus e.g. `cancelled` and `returned`)
-- [ ] Define the payment status values so that `completed` is the Successful Payment status (plus e.g. `failed`, `pending` and `refunded`)
-- [ ] Apply the schema to Supabase and check that all six tables and relationships exist
-- [ ] Commit: database schema
+- [x] Create the Supabase project to use as the PostgreSQL database
+- [x] Store the database connection string in `.env`
+- [x] Write `database/schema.sql` with the six tables: `customers`, `categories`, `products`, `orders`, `order_items`, `payments`
+- [x] Add primary keys, foreign keys and sensible constraints (e.g. non-negative prices and quantities)
+- [x] Use clear, self-explanatory column names
+- [x] Define the order status values so that `delivered` is the Completed Order status (plus e.g. `cancelled` and `returned`)
+- [x] Define the payment status values so that `completed` is the Successful Payment status (plus e.g. `failed`, `pending` and `refunded`)
+- [x] Apply the schema to Supabase and check that all six tables and relationships exist
+- [x] Commit: database schema
 
 ## Phase 4 — Faker seed data
 
@@ -52,7 +52,7 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [ ] Generate 100–200 products with a price, a cost lower than the price, and stock
 - [ ] Generate about 1,000 customers with name, email, city, state/country and signup date
 - [ ] Generate a few thousand orders with dates spread over about two years and a mix of statuses
-- [ ] Generate order items with product, quantity and unit price
+- [ ] Generate order items with product, quantity, `unit_price` and `unit_cost` (both captured at the time of the order)
 - [ ] Generate payments with varied methods and statuses that are consistent with each order's status
 - [ ] Run the seed script against Supabase
 - [ ] Check row counts and run hand-written SQL for Revenue, Profit and AOV to confirm the data looks realistic

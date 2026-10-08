@@ -171,9 +171,9 @@ Version 1 uses **one PostgreSQL database** with **six tables** that model a simp
 |---|---|---|
 | `customers` | People who shop at the store (name, email, city, state/country, signup date) | One customer → many orders |
 | `categories` | Product categories (e.g. Electronics, Apparel, Home) | One category → many products |
-| `products` | Items for sale (name, category, price, cost, stock) | Many products → one category |
+| `products` | Items for sale (name, category, current price, current cost, stock) | Many products → one category |
 | `orders` | A purchase by a customer (date, status) | Many orders → one customer |
-| `order_items` | Line items in an order (product, quantity, unit price) | Many items → one order; many items → one product |
+| `order_items` | Line items in an order (product, quantity, and the unit price and unit cost at the time of the order) | Many items → one order; many items → one product |
 | `payments` | Payment records for orders (amount, method, status, date) | Many payments → one order |
 
 ```
@@ -200,7 +200,7 @@ These rules give the LLM consistent business semantics. They are included in the
 | **Completed Order** | An order whose `orders.status` is `delivered`. Cancelled and returned orders are not completed. |
 | **Successful Payment** | A payment whose `payments.status` is `completed`. Failed, pending or refunded payments are not successful. |
 | **Revenue** | The sum of `order_items.quantity × order_items.unit_price` across **completed orders** only. |
-| **Profit** | Revenue minus product cost: the sum of `order_items.quantity × (order_items.unit_price − products.cost)` across **completed orders** only. |
+| **Profit** | Revenue minus the cost captured at the time of the order: the sum of `order_items.quantity × (order_items.unit_price − order_items.unit_cost)` across **completed orders** only. `products.cost` is the current cost and is not used for historical profit. |
 | **Average Order Value (AOV)** | Revenue divided by the number of distinct **completed orders**. |
 
 The exact status values must match these definitions when the schema is written in `database/`.
