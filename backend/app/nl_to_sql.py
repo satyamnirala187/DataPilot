@@ -110,7 +110,9 @@ class GeneratedSQL(BaseModel):
 class SQLGenerationError(Exception):
     """SQL could not be generated. kind is one of:
     not_configured, invalid_question, unavailable, rate_limited, model_unavailable,
-    empty_response, invalid_response.
+    request_failed, empty_response, invalid_response.
+
+    Only "unavailable" (5xx or network failure) is transient and worth retrying.
 
     The message never contains the API key, request details or raw SDK errors.
     """
@@ -170,7 +172,7 @@ def _api_error(code: int | None) -> SQLGenerationError:
         return SQLGenerationError("model_unavailable", f"Gemini model '{settings.gemini_model}' is not available.")
     if code is not None and code >= 500:
         return SQLGenerationError("unavailable", f"Gemini service error (HTTP {code}).")
-    return SQLGenerationError("unavailable", f"Gemini request failed (HTTP {code}).")
+    return SQLGenerationError("request_failed", f"Gemini rejected the request (HTTP {code}).")
 
 
 def _extract_sql(response: types.GenerateContentResponse) -> str:
