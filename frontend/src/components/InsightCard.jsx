@@ -1,12 +1,24 @@
-/** The AI-written insight. The query already succeeded, so a missing insight is only a quiet note. */
+import Icon from './Icon.jsx'
+
+/** The AI-written business takeaway. The query already succeeded, so a missing insight is only a quiet note. */
 export default function InsightCard({ insight }) {
   if (!insight) {
-    return <p className="insight-unavailable">Insight temporarily unavailable.</p>
+    return (
+      <div className="insight-unavailable">
+        <Icon name="sparkle" size={16} />
+        <p>Insight temporarily unavailable.</p>
+      </div>
+    )
   }
   return (
-    <section className="card insight-card" aria-labelledby="insight-heading">
-      <h2 id="insight-heading">AI Insight</h2>
-      <p>{insight}</p>
+    <section className="insight-card" aria-labelledby="insight-heading">
+      <span className="insight-icon">
+        <Icon name="sparkle" size={18} />
+      </span>
+      <div>
+        <h2 id="insight-heading">AI Insight</h2>
+        <p className="insight-text">{insight}</p>
+      </div>
     </section>
   )
 }

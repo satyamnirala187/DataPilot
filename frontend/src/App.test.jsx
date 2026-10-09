@@ -41,9 +41,22 @@ describe('DataPilot page', () => {
   it('renders the header, question field and Analyze button', () => {
     render(<App />)
     expect(screen.getByRole('heading', { level: 1, name: 'DataPilot' })).toBeInTheDocument()
-    expect(screen.getByText('Ask business questions in plain English')).toBeInTheDocument()
+    expect(screen.getByText('AI Business Data Analyst')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Ask a business question' })).toBeInTheDocument()
     expect(screen.getByLabelText('Your question')).toHaveValue('')
     expect(screen.getByRole('button', { name: 'Analyze' })).toBeEnabled()
+  })
+
+  it('shows an empty state before the first question and replaces it with the answer', async () => {
+    fetchMock.mockReturnValue(jsonResponse(200, SUCCESS))
+    const user = userEvent.setup()
+    render(<App />)
+    expect(screen.getByText('Your answer will appear here')).toBeInTheDocument()
+
+    await ask(user, 'What are the top 2 categories by revenue?')
+    expect(await screen.findByRole('heading', { name: 'Answer' })).toBeInTheDocument()
+    expect(screen.getByText(SUCCESS.question, { selector: 'p' })).toBeInTheDocument()
+    expect(screen.queryByText('Your answer will appear here')).not.toBeInTheDocument()
   })
 
   it('fills the question field when an example is clicked, without calling the API', async () => {
@@ -147,6 +160,48 @@ describe('DataPilot page', () => {
     expect(alert).toHaveTextContent('Too many requests')
     expect(alert).toHaveTextContent('You are asking questions too quickly. Please wait a minute and try again.')
     expect(screen.getByRole('button', { name: 'Analyze' })).toBeEnabled()
+  })
+
+  it.each([
+    [429, 'warning'],
+    [503, 'warning'],
+    [504, 'warning'],
+    [400, 'error'],
+    [500, 'error'],
+  ])('shows HTTP %i as a %s', async (status, tone) => {
+    fetchMock.mockReturnValue(jsonResponse(status, { error: { code: 'x', message: 'A safe message.' } }))
+    const user = userEvent.setup()
+    render(<App />)
+    await ask(user, 'Revenue?')
+    expect(await screen.findByRole('alert')).toHaveAttribute('data-tone', tone)
+  })
+
+  it('treats an unreachable backend as a temporary problem', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+    const user = userEvent.setup()
+    render(<App />)
+    await ask(user, 'Revenue?')
+    expect(await screen.findByRole('alert')).toHaveAttribute('data-tone', 'warning')
+  })
+
+  it('copies the generated SQL to the clipboard', async () => {
+    fetchMock.mockReturnValue(jsonResponse(200, SUCCESS))
+    const user = userEvent.setup() // provides a test clipboard
+    render(<App />)
+    await ask(user, 'Revenue?')
+    await user.click(await screen.findByRole('button', { name: 'Copy SQL' }))
+    expect(await navigator.clipboard.readText()).toBe(SUCCESS.sql)
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument()
+  })
+
+  it('says so when the clipboard is not available', async () => {
+    fetchMock.mockReturnValue(jsonResponse(200, SUCCESS))
+    const user = userEvent.setup()
+    render(<App />)
+    await ask(user, 'Revenue?')
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'))
+    await user.click(await screen.findByRole('button', { name: 'Copy SQL' }))
+    expect(await screen.findByRole('button', { name: 'Copy failed' })).toBeInTheDocument()
   })
 
   it('does not show raw response bodies that are not in the documented error shape', async () => {
