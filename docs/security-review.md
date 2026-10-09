@@ -43,8 +43,10 @@ could return and checks that the executor is never called.
 ## Known limits (accepted for v1)
 
 - The rate limiter is in memory, so each backend process counts separately and a restart clears
-  it. Behind Render's proxy, uvicorn must run with `--proxy-headers` so clients are told apart by
-  their real IP.
+  it. Behind Render's proxy, uvicorn trusts forwarded addresses only from private ranges
+  (`--proxy-headers --forwarded-allow-ips`, see `docs/deployment.md`) so clients are told apart by
+  their real IP and cannot forge it. Tested locally; the real client IP must be verified after the
+  first Render deployment.
 - A live prompt-injection check through Gemini (Phase 8's `/docs` test) is still pending because
   of Gemini rate limits. The tests above assume the worst case instead: a model that obeys the
   injection completely.

@@ -1,0 +1,28 @@
+# Render Blueprint for the DataPilot API: one Python web service, one process.
+# Secrets are never stored here: Render asks for every "sync: false" value in its dashboard.
+# Full walkthrough: docs/deployment.md
+services:
+  - type: web
+    name: datapilot-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # One worker, so the in-memory rate limiter sees every request.
+    # Proxy headers are trusted only from private-network and loopback addresses, so uvicorn takes
+    # the rightmost public address in X-Forwarded-For (the one added by the proxy) instead of a value
+    # the client could forge. This was tested locally; Render does not document its proxy's source
+    # range, so the client IP must be verified after the first deploy (see docs/deployment.md).
+    startCommand: >-
+      uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+      --proxy-headers --forwarded-allow-ips "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1"
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION  # not a secret; takes precedence over other version settings on Render
+        value: "3.13.16"
+      - key: READONLY_DATABASE_URL  # the read-only role via the Supabase session pooler
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS  # JSON list: the Vercel URL plus localhost origins
+        sync: false

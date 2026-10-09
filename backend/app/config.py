@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     # Basic per-client rate limit for POST /query, to protect the Gemini quota: at most
     # rate_limit_requests questions per rate_limit_window_seconds from one client IP.
     # Counted in memory, so each backend process has its own counts (see app/rate_limiter.py).
-    # Behind a reverse proxy, run uvicorn with --proxy-headers so the IP is the real client's.
+    # Behind a reverse proxy, uvicorn must trust the proxy's forwarded client address
+    # (--proxy-headers with --forwarded-allow-ips; see render.yaml and docs/deployment.md).
     rate_limit_requests: int = Field(default=5, ge=1)
     rate_limit_window_seconds: int = Field(default=60, ge=1)
 

@@ -163,15 +163,15 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 
 ## Phase 13 — Deployment
 
-- [ ] Confirm that the Supabase database has the schema, seed data and read-only role
+- [x] Confirm that the Supabase database has the schema, seed data and read-only role
 - [ ] Deploy the backend to Render
 - [ ] Set backend environment variables in Render (Gemini key, read-only database URL, allowed frontend origin)
 - [ ] Check `/health` on the Render URL
 - [ ] Deploy the frontend to Vercel with the backend URL configured
 - [ ] Set the backend CORS origin to the Vercel URL
 - [ ] Test the full flow on the public URL
-- [ ] Confirm that the frontend bundle contains no secrets
-- [ ] Commit: deployment configuration
+- [x] Confirm that the frontend bundle contains no secrets
+- [x] Commit: deployment configuration
 
 ## Phase 14 — Final UI polish
 
