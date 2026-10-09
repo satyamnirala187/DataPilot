@@ -151,15 +151,15 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 
 ## Phase 12 — Testing and benchmark questions
 
-- [ ] Write a benchmark list of example business questions covering rankings, totals, trends and comparisons
-- [ ] Include questions that use each business metric (Revenue, Profit, AOV, Completed Order, Successful Payment)
-- [ ] Write the expected answer for each benchmark question using hand-written SQL
+- [x] Write a benchmark list of example business questions covering rankings, totals, trends and comparisons
+- [x] Include questions that use each business metric (Revenue, Profit, AOV, Completed Order, Successful Payment)
+- [x] Write the expected answer for each benchmark question using hand-written SQL
 - [ ] Run every benchmark question through the app and record pass/fail
 - [ ] Improve the schema context or prompt for the failing questions and re-run
-- [ ] Check that each chart rule is triggered by at least one benchmark question
-- [ ] Manually test each error case (bad question, rejected SQL, timeout, empty results)
-- [ ] Confirm that the validator tests cover both allowed and blocked cases and all pass
-- [ ] Commit: benchmark questions and results
+- [x] Check that each chart rule is triggered by at least one benchmark question
+- [x] Manually test each error case (bad question, rejected SQL, timeout, empty results)
+- [x] Confirm that the validator tests cover both allowed and blocked cases and all pass
+- [x] Commit: benchmark questions and results
 
 ## Phase 13 — Deployment
 
