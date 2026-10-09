@@ -8,18 +8,16 @@ services:
     plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    # One worker, so the in-memory rate limiter sees every request.
-    # Proxy headers are trusted only from private-network and loopback addresses, so uvicorn takes
-    # the rightmost public address in X-Forwarded-For (the one added by the proxy) instead of a value
-    # the client could forge. This was tested locally; Render does not document its proxy's source
-    # range, so the client IP must be verified after the first deploy (see docs/deployment.md).
-    startCommand: >-
-      uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
-      --proxy-headers --forwarded-allow-ips "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1"
+    # One worker, so the in-memory rate limiter sees every request. Client addresses come from
+    # app/client_ip.py (CF-Connecting-IP, set by Cloudflare), so uvicorn's X-Forwarded-For
+    # handling is switched off: the app never relies on a header the client can forge.
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --no-proxy-headers
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION  # not a secret; takes precedence over other version settings on Render
         value: "3.13.16"
+      - key: TRUST_CF_CONNECTING_IP  # not a secret; Render's edge is Cloudflare, which sets this header
+        value: "true"
       - key: READONLY_DATABASE_URL  # the read-only role via the Supabase session pooler
         sync: false
       - key: GEMINI_API_KEY

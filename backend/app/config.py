@@ -26,8 +26,10 @@ class Settings(BaseSettings):
     # Basic per-client rate limit for POST /query, to protect the Gemini quota: at most
     # rate_limit_requests questions per rate_limit_window_seconds from one client IP.
     # Counted in memory, so each backend process has its own counts (see app/rate_limiter.py).
-    # Behind a reverse proxy, uvicorn must trust the proxy's forwarded client address
-    # (--proxy-headers with --forwarded-allow-ips; see render.yaml and docs/deployment.md).
+    # Clients are identified by app/client_ip.py. Behind Cloudflare (Render), set
+    # TRUST_CF_CONNECTING_IP=true so the real visitor address in CF-Connecting-IP is used; leave it
+    # off anywhere else, because without Cloudflare a client could send that header itself.
+    trust_cf_connecting_ip: bool = False
     rate_limit_requests: int = Field(default=5, ge=1)
     rate_limit_window_seconds: int = Field(default=60, ge=1)
 

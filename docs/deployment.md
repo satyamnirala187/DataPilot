@@ -33,10 +33,11 @@ Create the service from the Blueprint (`render.yaml`, **New → Blueprint**), or
 | Runtime | Python 3 |
 | Root directory | `backend` |
 | Build command | `pip install -r requirements.txt` |
-| Start command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers --forwarded-allow-ips "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1"` |
+| Start command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --no-proxy-headers` |
 | Health check path | `/health` |
 | Instance | one instance (the free plan is fine) |
 | Python version | environment variable `PYTHON_VERSION=3.13.16` (not a secret) |
+| Client IPs | environment variable `TRUST_CF_CONNECTING_IP=true` (not a secret, see [Client IPs](#security-notes)) |
 
 Environment variables (names only; enter values in the Render dashboard):
 
@@ -107,22 +108,28 @@ Everything from Phase 11 applies unchanged in production (see `docs/security-rev
 error JSON, no stack traces, security headers, restricted CORS, rate limiting, the 16 KB body cap,
 the SQL validator, the read-only role, the statement timeout and the row limit.
 
-**Client IPs behind Render's proxy.** The rate limiter counts requests per client IP, so uvicorn
-must report the real client, not Render's proxy. The start command trusts `X-Forwarded-For` only
-from private-network and loopback addresses (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`,
-`127.0.0.1`, `::1`). Uvicorn then walks the header from the right and takes the first address
-outside those ranges: the one the proxy appended. Values a client forges at the left of the header
-are ignored. `--forwarded-allow-ips "*"` would instead take the leftmost value, which any client
-can fake, so it is not used; do not switch to it without a security review. `--workers 1` keeps
-one process, so the in-memory limiter sees every request.
+**Client IPs behind Render's proxy.** The rate limiter counts requests per client IP. On Render the
+TCP peer (`request.client.host`) is a private `10.x` proxy address shared by every visitor, so it
+cannot identify clients. Requests reach Render through Cloudflare, which puts the real visitor
+address in `CF-Connecting-IP` and overwrites any value a client sends.
 
-This behaviour was tested locally with the exact start command. Render does not document the
-address range its proxy connects from, so the private ranges are an assumption until checked:
+`backend/app/client_ip.py` therefore resolves the rate-limit identity as:
 
-- After the first deploy, look at the request lines in the Render logs (uvicorn logs
-  `request.client.host`). They should show varying public client addresses.
-- If every request shows the same address (the proxy's), the forwarded client IP is not being used.
-  Adjust the trusted proxy configuration before treating the rate limiter as production-verified.
+1. If `TRUST_CF_CONNECTING_IP=true` and `CF-Connecting-IP` holds one valid IP address, use it
+   (IPv6 addresses are grouped by their /64 network, since one user usually controls a whole /64).
+2. Otherwise use `request.client.host`.
+
+`X-Forwarded-For` is never used, and uvicorn runs with `--no-proxy-headers`, because clients can
+put anything at the start of that header. Only enable `TRUST_CF_CONNECTING_IP` where Cloudflare is
+really in front (as on Render); anywhere else a client could set the header itself.
+`--forwarded-allow-ips "*"` is not used; do not switch to it without a security review.
+`--workers 1` keeps one process, so the in-memory limiter sees every request.
+
+To verify after a deploy (no logging of IPs needed): send six blank questions from one network.
+The sixth should return 429 `too_many_requests`, while a request from a different network (for
+example a phone on mobile data) still gets 400 `invalid_question`. If both networks share one
+limit, `CF-Connecting-IP` is not reaching the app; check `TRUST_CF_CONNECTING_IP` before treating
+the rate limiter as production-verified.
 
 ## Troubleshooting
 
@@ -133,4 +140,4 @@ address range its proxy connects from, so the private ranges are an assumption u
 | Render fails at startup with a settings error | `CORS_ALLOWED_ORIGINS` is not a JSON list |
 | Every question returns "The database is unavailable" | `READONLY_DATABASE_URL` is wrong, or uses the IPv6-only direct host instead of the pooler |
 | Questions return 429 "Too many requests to the AI service" | The Gemini quota is exhausted; the rest of the app keeps working |
-| Everyone shares one rate limit | Render logs show one proxy address; see "Client IPs" above |
+| Everyone shares one rate limit | `TRUST_CF_CONNECTING_IP` is not `true` on Render; see "Client IPs" above |

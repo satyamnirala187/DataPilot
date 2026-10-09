@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.client_ip import client_ip
 from app.config import settings
 from app.middleware import CatchUnexpectedErrors, LimitRequestBody, SecurityHeaders, error_response
 from app.query_service import QueryResponse, QueryServiceError, run_business_query
@@ -88,8 +89,7 @@ def handle_http_error(request: Request, error: StarletteHTTPException) -> JSONRe
 
 
 def enforce_rate_limit(request: Request) -> None:
-    client = request.client.host if request.client else "unknown"
-    retry_after = rate_limiter.check(client)
+    retry_after = rate_limiter.check(client_ip(request))
     if retry_after is not None:
         logger.warning("Rate limit reached for a client; retry in %d s", retry_after)
         raise HTTPException(status_code=429, headers={"Retry-After": str(retry_after)})
