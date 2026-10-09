@@ -180,7 +180,7 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Polished error and empty-result states
 - [x] Readable SQL viewer
 - [x] Responsive design (desktop and mobile widths)
-- [ ] Redeploy and check the live site
+- [x] Redeploy and check the live site
 - [x] Commit: UI polish
 
 ## Phase 15 — README, diagrams, demo and resume presentation
