@@ -111,3 +111,40 @@ def test_unexpected_error_gets_a_generic_500_without_details(pipeline):
 def test_query_endpoint_is_listed_in_the_openapi_docs():
     paths = client.get("/openapi.json").json()["paths"]
     assert "post" in paths["/query"] and "get" in paths["/health"]
+
+
+FRONTEND_ORIGIN = "http://localhost:5173"
+
+
+def test_cors_preflight_allows_the_local_frontend():
+    response = client.options("/query", headers={
+        "Origin": FRONTEND_ORIGIN,
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+    })
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == FRONTEND_ORIGIN
+
+
+def test_cors_preflight_rejects_unknown_origins():
+    response = client.options("/query", headers={
+        "Origin": "https://evil.example.com",
+        "Access-Control-Request-Method": "POST",
+    })
+    assert response.status_code == 400
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_cors_headers_on_success_and_error_responses(pipeline):
+    ok = client.post("/query", json={"question": "Revenue?"}, headers={"Origin": FRONTEND_ORIGIN})
+    assert ok.headers["access-control-allow-origin"] == FRONTEND_ORIGIN
+
+    pipeline.result = QueryServiceError("generation_unavailable", "A safe message.")
+    error = client.post("/query", json={"question": "Revenue?"}, headers={"Origin": FRONTEND_ORIGIN})
+    assert error.status_code == 503
+    assert error.headers["access-control-allow-origin"] == FRONTEND_ORIGIN
+
+
+def test_cors_never_allows_every_origin():
+    response = client.get("/health", headers={"Origin": "https://evil.example.com"})
+    assert "access-control-allow-origin" not in response.headers

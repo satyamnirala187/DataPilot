@@ -4,6 +4,7 @@ import logging
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -15,6 +16,14 @@ logger = logging.getLogger(__name__)
 MAX_QUESTION_LENGTH = 500
 
 app = FastAPI(title=settings.app_name)
+
+# Only the configured frontend origins may call the API from a browser. No cookies are used.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allowed_origins,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
 
 # HTTP status for each QueryServiceError kind. Anything unknown becomes a 500.
 STATUS_BY_ERROR_KIND = {

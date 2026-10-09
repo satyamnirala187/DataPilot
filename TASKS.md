@@ -110,16 +110,16 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 
 ## Phase 9 — Minimal React frontend
 
-- [ ] Create the React + Vite app in `frontend/`
-- [ ] Read the backend URL from a frontend environment variable
-- [ ] Allow the local frontend origin in the backend CORS settings
-- [ ] Add the question input and submit button
-- [ ] Call the backend and show a loading state
-- [ ] Show the generated SQL
-- [ ] Show the results table
-- [ ] Add clickable example questions
-- [ ] Show error messages returned by the backend
-- [ ] Commit: minimal frontend
+- [x] Create the React + Vite app in `frontend/`
+- [x] Read the backend URL from a frontend environment variable
+- [x] Allow the local frontend origin in the backend CORS settings
+- [x] Add the question input and submit button
+- [x] Call the backend and show a loading state
+- [x] Show the generated SQL
+- [x] Show the results table
+- [x] Add clickable example questions
+- [x] Show error messages returned by the backend
+- [x] Commit: minimal frontend
 
 ## Phase 10 — Charts and business insight
 
