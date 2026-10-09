@@ -1,8 +1,10 @@
 import { useRef, useState } from 'react'
 import ErrorMessage from './components/ErrorMessage.jsx'
+import InsightCard from './components/InsightCard.jsx'
 import QuestionForm from './components/QuestionForm.jsx'
 import ResultsTable from './components/ResultsTable.jsx'
 import SqlViewer from './components/SqlViewer.jsx'
+import Visualization from './components/Visualization.jsx'
 import { postQuery } from './services/api.js'
 
 export default function App() {
@@ -72,6 +74,10 @@ export default function App() {
 
         {result && (
           <>
+            {/* No rows means nothing to summarise, so no insight is expected. */}
+            {result.rows.length > 0 && <InsightCard insight={result.insight} />}
+            <Visualization visualization={result.visualization} columns={result.columns} rows={result.rows} />
+            {/* The table is always shown; the chart only complements it. */}
             <ResultsTable
               columns={result.columns}
               rows={result.rows}

@@ -3,23 +3,27 @@
 import pytest
 
 from app.db_executor import QueryExecutionError, QueryResult
+from app.insight_service import InsightError
 from app.nl_to_sql import SQLGenerationError
 from app.query_service import GEMINI_RETRY_DELAYS, QueryServiceError, run_business_query
 from app.sql_validator import UnsafeSQLError, validate_sql
 
 RAW_SQL = "SELECT SUM(oi.quantity * oi.unit_price) AS revenue FROM orders o JOIN order_items oi ON oi.order_id = o.order_id"
 SAFE_SQL = RAW_SQL + " LIMIT 500"
+INSIGHT = "Total revenue is ₹21.30M across all delivered orders."
 
 
 class Pipeline:
     """Fake generate / validate / execute / sleep steps that record how they were called."""
 
-    def __init__(self, *, generate_results=None, validate_error=None, execute_result=None, execute_error=None):
+    def __init__(self, *, generate_results=None, validate_error=None, execute_result=None, execute_error=None,
+                 insight=INSIGHT):
         self.generate_results = list(generate_results or [RAW_SQL])  # SQL strings or exceptions, in order
         self.validate_error = validate_error
         self.execute_result = execute_result or QueryResult(columns=["revenue"], rows=[[21304631.99]], truncated=False)
         self.execute_error = execute_error
-        self.generated_for, self.validated, self.executed, self.slept = [], [], [], []
+        self.insight = insight  # the insight text, or an exception to raise
+        self.generated_for, self.validated, self.executed, self.slept, self.summarized = [], [], [], [], []
 
     def generate(self, question):
         self.generated_for.append(question)
@@ -40,9 +44,15 @@ class Pipeline:
             raise self.execute_error
         return self.execute_result
 
+    def summarize(self, question, columns, rows, truncated):
+        self.summarized.append((question, columns, rows, truncated))
+        if isinstance(self.insight, Exception):
+            raise self.insight
+        return self.insight
+
     def run(self, question="What is our total revenue?"):
         return run_business_query(question, generate=self.generate, validate=self.validate,
-                                  execute=self.execute, sleep=self.slept.append)
+                                  execute=self.execute, summarize=self.summarize, sleep=self.slept.append)
 
 
 def failure(pipeline: Pipeline, question="What is our total revenue?") -> QueryServiceError:
@@ -250,7 +260,8 @@ def http_error(code: int) -> genai_errors.APIError:
 def run_with(gemini: FailingGemini, slept: list):
     return run_business_query("Total revenue?", generate=lambda q: generate_sql(q, client=gemini),
                               validate=lambda sql: SAFE_SQL,
-                              execute=lambda sql: QueryResult(["revenue"], [[1]], False), sleep=slept.append)
+                              execute=lambda sql: QueryResult(["revenue"], [[1]], False),
+                              summarize=lambda *args: INSIGHT, sleep=slept.append)
 
 
 @pytest.mark.parametrize("code, kind", [
@@ -284,3 +295,59 @@ def test_gemini_transient_errors_stop_after_two_retries(failure):
     assert caught.value.kind == "generation_unavailable"
     assert gemini.calls == 3 and slept == [0.5, 1.0]
     assert "upstream detail" not in str(caught.value)
+
+
+# --- Chart metadata and optional insight ---------------------------------------------------
+
+def test_successful_query_includes_chart_metadata_and_insight():
+    p = Pipeline()
+    response = p.run()
+    assert response.visualization.type == "kpi" and response.visualization.y_key == "revenue"
+    assert response.insight == INSIGHT
+    assert p.summarized == [("What is our total revenue?", ["revenue"], [[21304631.99]], False)]
+
+
+def test_bar_chart_metadata_comes_from_the_result_shape():
+    result = QueryResult(columns=["category", "revenue"], rows=[["Electronics", 7.0], ["Apparel", 4.0]], truncated=False)
+    response = Pipeline(execute_result=result).run()
+    assert response.visualization.model_dump() == {"type": "bar", "x_key": "category", "y_key": "revenue"}
+
+
+@pytest.mark.parametrize("insight_error", [
+    InsightError("rate_limited", "Gemini rate limit reached."),
+    InsightError("unavailable", "Gemini service error (HTTP 503)."),
+    InsightError("invalid_response", "Gemini returned a response in an unexpected format."),
+    InsightError("not_configured", "GEMINI_API_KEY is not configured."),
+    TimeoutError("timed out"),
+    RuntimeError("unexpected"),
+])
+def test_insight_failure_still_returns_the_query_result(insight_error):
+    response = Pipeline(insight=insight_error).run()
+    assert response.insight is None
+    assert response.sql == SAFE_SQL
+    assert response.rows == [[21304631.99]] and response.row_count == 1 and response.truncated is False
+    assert response.visualization.type == "kpi"
+
+
+def test_insight_failure_logs_only_sanitized_details(caplog):
+    Pipeline(insight=RuntimeError("password=hunter2 host=db.internal")).run()
+    assert "hunter2" not in caplog.text and "RuntimeError" in caplog.text
+
+
+def test_empty_result_skips_the_insight_call():
+    p = Pipeline(execute_result=QueryResult(columns=["revenue"], rows=[], truncated=False))
+    response = p.run()
+    assert response.insight is None and p.summarized == []
+    assert response.visualization.type == "table"
+
+
+def test_insight_receives_the_truncated_flag():
+    p = Pipeline(execute_result=QueryResult(columns=["order_id"], rows=[[1], [2]], truncated=True))
+    p.run()
+    assert p.summarized[0][3] is True
+
+
+def test_insight_failure_does_not_retry_or_regenerate_sql():
+    p = Pipeline(insight=InsightError("unavailable", "Gemini service error (HTTP 503)."))
+    p.run()
+    assert len(p.summarized) == 1 and len(p.generated_for) == 1 and p.slept == []

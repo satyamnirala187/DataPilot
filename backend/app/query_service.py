@@ -1,8 +1,10 @@
-"""The query pipeline: question -> generated SQL -> validated SQL -> rows.
+"""The query pipeline: question -> generated SQL -> validated SQL -> rows -> chart + insight.
 
-This module only coordinates the three existing steps and turns their errors into one
-QueryServiceError. Generation, validation and execution stay in their own modules.
+This module only coordinates the steps and turns their errors into one QueryServiceError.
+Generation, validation, execution, chart selection and insights stay in their own modules.
 Only SQL approved by the validator is ever passed to the executor.
+
+The insight is optional: if it fails, the result is still returned, with insight = None.
 """
 
 import logging
@@ -12,7 +14,9 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.chart_selector import Visualization, select_visualization
 from app.db_executor import QueryExecutionError, QueryResult, execute_query
+from app.insight_service import InsightError, generate_insight
 from app.nl_to_sql import SQLGenerationError, generate_sql
 from app.sql_validator import UnsafeSQLError, validate_sql
 
@@ -30,6 +34,8 @@ class QueryResponse(BaseModel):
     rows: list[list[Any]]
     row_count: int
     truncated: bool
+    visualization: Visualization  # chosen by fixed rules, never by the LLM
+    insight: str | None  # None when there are no rows or the insight could not be generated
 
 
 class QueryServiceError(Exception):
@@ -50,6 +56,7 @@ def run_business_query(
     generate: Callable[[str], str] = generate_sql,
     validate: Callable[[str], str] = validate_sql,
     execute: Callable[[str], QueryResult] = execute_query,
+    summarize: Callable[[str, list[str], list[list[Any]], bool], str] = generate_insight,
     sleep: Callable[[float], None] = time.sleep,
 ) -> QueryResponse:
     """Answer a business question with data. The keyword arguments exist so tests can swap steps."""
@@ -78,7 +85,22 @@ def run_business_query(
         rows=result.rows,
         row_count=len(result.rows),
         truncated=result.truncated,
+        visualization=select_visualization(result.columns, result.rows),
+        insight=_optional_insight(question, result, summarize),
     )
+
+
+def _optional_insight(question: str, result: QueryResult, summarize: Callable[..., str]) -> str | None:
+    """The insight, or None. A failure here never turns a successful query into an error."""
+    if not result.rows:
+        return None  # nothing to summarise, so no Gemini call
+    try:
+        return summarize(question, result.columns, result.rows, result.truncated)
+    except InsightError as error:
+        logger.warning("Insight skipped (%s): %s", error.kind, error)
+    except Exception as error:  # the insight is optional; never let it break the answer
+        logger.warning("Insight skipped (unexpected %s)", type(error).__name__)
+    return None
 
 
 def _generate_with_retry(question: str, generate: Callable[[str], str], sleep: Callable[[float], None]) -> str:

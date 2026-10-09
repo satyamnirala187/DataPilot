@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main
+from app.chart_selector import Visualization
 from app.query_service import QueryResponse, QueryServiceError
 
 client = TestClient(main.app)
@@ -15,6 +16,8 @@ SUCCESS = QueryResponse(
     rows=[[21304631.99]],
     row_count=1,
     truncated=False,
+    visualization=Visualization(type="kpi", y_key="revenue"),
+    insight="Total revenue is ₹21.30M.",
 )
 
 
@@ -48,7 +51,8 @@ def test_query_success(pipeline):
 
 def test_query_response_fields(pipeline):
     body = client.post("/query", json={"question": "Revenue?"}).json()
-    assert set(body) == {"question", "sql", "columns", "rows", "row_count", "truncated"}
+    assert set(body) == {"question", "sql", "columns", "rows", "row_count", "truncated", "visualization", "insight"}
+    assert body["visualization"] == {"type": "kpi", "x_key": None, "y_key": "revenue"}
 
 
 @pytest.mark.parametrize("payload", [

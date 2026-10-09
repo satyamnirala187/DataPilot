@@ -271,3 +271,48 @@ tbody tr:last-child td {
     width: 100%;
   }
 }
+
+/* Insight */
+
+.insight-card {
+  border-left: 4px solid var(--accent);
+}
+
+.insight-card p {
+  margin: 0;
+}
+
+.insight-unavailable {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+/* KPI */
+
+.kpi-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.kpi-value {
+  margin: 0;
+  font-size: 2.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* Charts */
+
+.chart-scroll {
+  overflow-x: auto;
+}
+
+@media (max-width: 600px) {
+  .kpi-value {
+    font-size: 1.75rem;
+  }
+}

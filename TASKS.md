@@ -123,19 +123,19 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 
 ## Phase 10 — Charts and business insight
 
-- [ ] Install Recharts
-- [ ] Implement the deterministic chart selection rules in application code (not the LLM):
-  - [ ] Single aggregate value → KPI
-  - [ ] Category + numeric value → bar chart
-  - [ ] Date/time + numeric value → line chart
-  - [ ] Otherwise → table only
-- [ ] Add the KPI display
-- [ ] Add the bar chart
-- [ ] Add the line chart
-- [ ] Add the insight prompt to the LLM service, based on the question and the returned rows
-- [ ] Add the summarize step to the pipeline and include the insight in the API response
-- [ ] Add the insight panel to the frontend
-- [ ] Commit: charts and insight
+- [x] Install Recharts
+- [x] Implement the deterministic chart selection rules in application code (not the LLM):
+  - [x] Single aggregate value → KPI
+  - [x] Category + numeric value → bar chart
+  - [x] Date/time + numeric value → line chart
+  - [x] Otherwise → table only
+- [x] Add the KPI display
+- [x] Add the bar chart
+- [x] Add the line chart
+- [x] Add the insight prompt to the LLM service, based on the question and the returned rows
+- [x] Add the summarize step to the pipeline and include the insight in the API response
+- [x] Add the insight panel to the frontend
+- [x] Commit: charts and insight
 
 ## Phase 11 — Error handling and security hardening
 
