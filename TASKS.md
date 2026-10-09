@@ -105,7 +105,7 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Add a Pydantic response model (generated SQL, columns, rows)
 - [x] Add the query endpoint to FastAPI that calls the pipeline
 - [x] Return a clear error when the validator rejects SQL
-- [ ] Test the endpoint end to end from `/docs`
+- [x] Test the endpoint end to end from `/docs`
 - [x] Commit: query pipeline and endpoint
 
 ## Phase 9 — Minimal React frontend
