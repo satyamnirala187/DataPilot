@@ -139,15 +139,15 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 
 ## Phase 11 — Error handling and security hardening
 
-- [ ] Friendly errors for: invalid question, rejected SQL, query timeout, no results
-- [ ] Add a global error handler so stack traces, credentials and internal details are never returned
-- [ ] Restrict CORS to the deployed frontend origin plus localhost (from configuration)
-- [ ] Add basic per-client rate limiting
-- [ ] Confirm the question length limit and Pydantic validation on all request bodies
-- [ ] Try prompt-injection style questions and confirm the validator and read-only role still block unsafe SQL
-- [ ] Confirm that no secrets are committed to the repository
-- [ ] Review all 15 Security Requirements in PROJECT.md and tick each one off
-- [ ] Commit: error handling and security hardening
+- [x] Friendly errors for: invalid question, rejected SQL, query timeout, no results
+- [x] Add a global error handler so stack traces, credentials and internal details are never returned
+- [x] Restrict CORS to the deployed frontend origin plus localhost (from configuration)
+- [x] Add basic per-client rate limiting
+- [x] Confirm the question length limit and Pydantic validation on all request bodies
+- [x] Try prompt-injection style questions and confirm the validator and read-only role still block unsafe SQL
+- [x] Confirm that no secrets are committed to the repository
+- [x] Review all 15 Security Requirements in PROJECT.md and tick each one off
+- [x] Commit: error handling and security hardening
 
 ## Phase 12 — Testing and benchmark questions
 

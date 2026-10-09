@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app import main
 from app.chart_selector import Visualization
 from app.query_service import QueryResponse, QueryServiceError
+from app.rate_limiter import RateLimiter
 
 client = TestClient(main.app)
 
@@ -19,6 +20,12 @@ SUCCESS = QueryResponse(
     visualization=Visualization(type="kpi", y_key="revenue"),
     insight="Total revenue is ₹21.30M.",
 )
+
+
+@pytest.fixture(autouse=True)
+def generous_rate_limit(monkeypatch):
+    """These tests are about responses, not rate limiting (see test_security.py)."""
+    monkeypatch.setattr(main, "rate_limiter", RateLimiter(max_requests=10_000, window_seconds=60))
 
 
 @pytest.fixture

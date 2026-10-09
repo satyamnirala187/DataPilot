@@ -136,6 +136,19 @@ describe('DataPilot page', () => {
     expect(alert).toHaveTextContent('A safe message.')
   })
 
+  it('shows the backend rate-limit message and lets the user try again', async () => {
+    fetchMock.mockReturnValue(jsonResponse(429, {
+      error: { code: 'too_many_requests', message: 'You are asking questions too quickly. Please wait a minute and try again.' },
+    }))
+    const user = userEvent.setup()
+    render(<App />)
+    await ask(user, 'Revenue?')
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Too many requests')
+    expect(alert).toHaveTextContent('You are asking questions too quickly. Please wait a minute and try again.')
+    expect(screen.getByRole('button', { name: 'Analyze' })).toBeEnabled()
+  })
+
   it('does not show raw response bodies that are not in the documented error shape', async () => {
     fetchMock.mockReturnValue(Promise.resolve(new Response('<html>Traceback (most recent call last)</html>', { status: 500 })))
     const user = userEvent.setup()
