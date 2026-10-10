@@ -1,12 +1,15 @@
 """DataPilot API entry point."""
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from datetime import UTC, datetime
+
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app import auth
 from app.client_ip import client_ip
 from app.config import settings
 from app.middleware import CatchUnexpectedErrors, LimitRequestBody, RequestContext, SecurityHeaders, error_response
@@ -43,7 +46,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],  # Authorization carries the demo session token
 )
 app.add_middleware(SecurityHeaders)
 
@@ -53,6 +56,8 @@ app.add_middleware(SecurityHeaders)
 #      Only well-formed requests that passed the first limit reach it, and each one it admits uses
 #      one unit, whatever happens next in the pipeline.
 rate_limiter = RateLimiter(settings.rate_limit_requests, settings.rate_limit_window_seconds)
+# Login attempts, per client, separate from the /query limit (app/auth.py).
+login_limiter = RateLimiter(auth.LOGIN_ATTEMPTS, auth.LOGIN_WINDOW_SECONDS)
 daily_limit = DailyLimit(settings.global_daily_query_limit)
 DAILY_LIMIT_MESSAGE = "The service has reached its daily AI request limit. Please try again later."
 
@@ -74,11 +79,44 @@ STATUS_BY_ERROR_KIND = {
 
 # Code and message for errors raised by the framework or this module (unknown path, wrong method, ...).
 HTTP_ERRORS = {
+    401: ("unauthorized", "Please log in to use DataPilot."),
     404: ("not_found", "This endpoint does not exist."),
     405: ("method_not_allowed", "This endpoint does not accept that HTTP method."),
     413: ("request_too_large", "The request is too large."),
     429: ("too_many_requests", "You are asking questions too quickly. Please wait a minute and try again."),
 }
+
+
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class LoginResponse(BaseModel):
+    token: str
+    expires_at: str  # ISO 8601, UTC
+
+
+class SessionResponse(BaseModel):
+    authenticated: bool
+    expires_at: str
+
+
+class LoginRejected(Exception):
+    """A login was refused. The same 401 is used whether the username or the password was wrong."""
+
+    RESPONSES = {
+        "invalid_credentials": (401, "Incorrect username or password."),
+        "too_many_login_attempts": (429, "Too many login attempts. Please wait a few minutes and try again."),
+        "login_unavailable": (503, "Login is not available right now. Please try again later."),
+    }
+
+    def __init__(self, code: str, retry_after: int | None = None):
+        super().__init__(code)
+        self.code = code
+        self.retry_after = retry_after
 
 
 class QueryRequest(BaseModel):
@@ -99,6 +137,13 @@ def handle_query_error(request: Request, error: QueryServiceError) -> JSONRespon
     metrics.error_kind, metrics.retry_after = error.kind, error.retry_after
     headers = {"Retry-After": str(error.retry_after)} if error.retry_after else None
     return error_response(STATUS_BY_ERROR_KIND.get(error.kind, 500), error.kind, str(error), headers=headers)
+
+
+@app.exception_handler(LoginRejected)
+def handle_login_rejected(request: Request, error: LoginRejected) -> JSONResponse:
+    status, message = LoginRejected.RESPONSES[error.code]
+    headers = {"Retry-After": str(error.retry_after)} if error.retry_after else None
+    return error_response(status, error.code, message, headers=headers)
 
 
 @app.exception_handler(RequestValidationError)
@@ -130,13 +175,53 @@ def enforce_rate_limit(request: Request) -> None:
         raise HTTPException(status_code=429, headers={"Retry-After": str(retry_after)})
 
 
+def enforce_login_limit(request: Request) -> None:
+    retry_after = login_limiter.check(client_ip(request))
+    if retry_after is not None:
+        raise LoginRejected("too_many_login_attempts", retry_after=retry_after)
+
+
+def iso_utc(unix_seconds: int) -> str:
+    return datetime.fromtimestamp(unix_seconds, UTC).isoformat().replace("+00:00", "Z")
+
+
+@app.post("/auth/login", response_model=LoginResponse, dependencies=[Depends(enforce_login_limit)])
+def login(body: LoginRequest) -> LoginResponse:
+    """Exchange the shared demo username and password for a session token. Never calls Gemini."""
+    if not auth.is_configured():
+        raise LoginRejected("login_unavailable")
+    if not auth.credentials_match(body.username, body.password):
+        raise LoginRejected("invalid_credentials")
+    token, session = auth.issue_token()
+    return LoginResponse(token=token, expires_at=iso_utc(session.expires_at))
+
+
+@app.get("/auth/session", response_model=SessionResponse)
+def session(current: auth.Session = Depends(auth.require_session)) -> SessionResponse:
+    """Is this token still valid? 401 if not."""
+    return SessionResponse(authenticated=True, expires_at=iso_utc(current.expires_at))
+
+
+@app.post("/auth/logout", status_code=204)
+def logout(request: Request) -> Response:
+    """End this session. Always 204, so the response never says whether the token was valid."""
+    try:
+        auth.revoked.revoke(auth.session_from_header(request.headers.get("authorization")))
+    except auth.AuthError:
+        pass
+    return Response(status_code=204)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     """Report that the API is running. Not rate limited."""
     return {"status": "ok", "service": settings.app_name}
 
 
-@app.post("/query", response_model=QueryResponse, dependencies=[Depends(enforce_rate_limit)])
+# Signed-in check first: a request without a valid session uses no rate-limit slot, no daily-cap
+# unit and never reaches Gemini or the database.
+@app.post("/query", response_model=QueryResponse,
+          dependencies=[Depends(auth.require_session), Depends(enforce_rate_limit)])
 def query(body: QueryRequest, request: Request) -> QueryResponse:
     """Answer a business question: generate SQL, validate it, run it read-only, return the rows."""
     metrics = query_metrics(request)

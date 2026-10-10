@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException
 
-from app.request_log import QueryMetrics, elapsed_ms, log_query_summary, new_request_id
+from app.request_log import QueryMetrics, elapsed_ms, log_login, log_query_summary, new_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -38,16 +38,17 @@ def error_response(status_code: int, code: str, message: str, headers: dict[str,
 
 class RequestContext:
     """Give every request a server-generated ID, returned as X-Request-ID, and log a summary of
-    each POST /query once it has finished.
+    each POST /query (and an event=login line for each POST /auth/login) once it has finished.
 
     The QueryMetrics object is kept in scope["state"], so the endpoint and the error handlers reach
     it as request.state.query_metrics. This sits outside CatchUnexpectedErrors, so safe 500s also
     carry the ID and are logged.
     """
 
-    def __init__(self, app, path: str = "/query", clock=time.monotonic):
+    def __init__(self, app, path: str = "/query", login_path: str = "/auth/login", clock=time.monotonic):
         self.app = app
         self.path = path
+        self.login_path = login_path
         self.clock = clock
 
     async def __call__(self, scope, receive, send):
@@ -68,9 +69,12 @@ class RequestContext:
         try:
             await self.app(scope, receive, send_with_id)
         finally:
-            if scope.get("method") == "POST" and scope.get("path") == self.path:
+            if scope.get("method") == "POST" and scope.get("path") in (self.path, self.login_path):
                 metrics.total_ms = elapsed_ms(self.clock() - started)
-                log_query_summary(metrics)
+                if scope["path"] == self.path:
+                    log_query_summary(metrics)
+                else:
+                    log_login(metrics)
 
 
 class CatchUnexpectedErrors:

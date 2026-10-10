@@ -114,7 +114,8 @@ All backend code is in `backend/app/`.
 
 | Module | Responsibility |
 |---|---|
-| `main.py` | The FastAPI app: `GET /health`, `POST /query`, the `QueryRequest` model, middleware order, exception handlers that map every error to `{"error": {"code", "message"}}`, and the `enforce_rate_limit` dependency |
+| `main.py` | The FastAPI app: `GET /health`, `POST /query`, `POST /auth/login`, `GET /auth/session`, `POST /auth/logout`, the `QueryRequest` model, middleware order, exception handlers that map every error to `{"error": {"code", "message"}}`, and the `enforce_rate_limit` dependency |
+| `auth.py` | Private demo access: one shared login checked by the backend, short-lived HMAC-SHA256-signed bearer tokens (`v1.<expiry>.<session id>.<signature>`), in-memory logout revocation, and the `require_session` dependency that `/query` runs before anything else |
 | `config.py` | `Settings` (pydantic-settings): database URL, Gemini key and model, CORS origins, rate limit, timeouts, row cap. Secrets are `SecretStr`, so they never appear in logs |
 | `query_service.py` | The pipeline, `run_business_query`: generate → validate → execute → select visualization → optional insight. Defines `QueryResponse` and turns step failures into `QueryServiceError` kinds |
 | `nl_to_sql.py` | The only code that asks Gemini for SQL: schema context, business definitions, SQL rules, untrusted-input rules, `generate_sql`, and `SQLGenerationError` |

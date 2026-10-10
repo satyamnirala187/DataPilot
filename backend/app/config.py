@@ -15,6 +15,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         # .env may hold values for later phases; ignore anything not defined here.
         extra="ignore",
+        # A rejected value (e.g. a too-short DEMO_PASSWORD) must not appear in the startup error.
+        hide_input_in_errors=True,
     )
 
     app_name: str = "DataPilot API"
@@ -54,6 +56,14 @@ class Settings(BaseSettings):
     # cut short. Normal answers are far smaller: the benchmark's largest is under 1 KB and a wide
     # 500-row table about 65 KB.
     max_result_bytes: int = Field(default=1_000_000, ge=1)
+
+    # Private demo access (app/auth.py): one shared login, checked only by this backend. Until all
+    # three secrets are set, login is unavailable and every /query is refused (fail closed).
+    # Never put real values in the repository; on Render they are secret environment variables.
+    demo_username: SecretStr | None = Field(default=None, min_length=1, max_length=100)
+    demo_password: SecretStr | None = Field(default=None, min_length=16, max_length=200)
+    demo_session_secret: SecretStr | None = Field(default=None, min_length=32)  # signs session tokens
+    demo_session_minutes: int = Field(default=120, ge=1, le=24 * 60)  # absolute session lifetime
 
     # Gemini, used to turn questions into SQL. The key is a SecretStr so it never appears in logs.
     gemini_api_key: SecretStr | None = None

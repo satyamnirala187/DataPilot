@@ -108,6 +108,18 @@ def log_query_summary(metrics: QueryMetrics) -> None:
     logger.log(level, "%s", metrics.summary())
 
 
+# POST /auth/login outcomes, from the response status alone: the log never says which credential
+# was wrong and never includes the username, password or token.
+LOGIN_OUTCOMES = {200: "success", 400: "invalid_request", 401: "failure", 429: "rate_limited", 503: "unavailable"}
+
+
+def log_login(metrics: QueryMetrics) -> None:
+    outcome = LOGIN_OUTCOMES.get(metrics.status, "error")
+    level = logging.INFO if outcome == "success" else logging.WARNING
+    logger.log(level, "event=login request_id=%s outcome=%s status=%s total_ms=%s",
+               metrics.request_id, outcome, metrics.status, metrics.total_ms)
+
+
 def elapsed_ms(seconds: float) -> int:
     return max(0, round(seconds * 1000))
 
