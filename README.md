@@ -32,6 +32,13 @@ Example questions (all from the benchmark suite):
 - What is the profit margin for each category?
 - How many customers have never placed an order?
 
+## Demo
+
+![DataPilot demo: asking for the top 5 product categories by revenue](docs/images/datapilot-demo.gif)
+
+The demo uses the real DataPilot frontend with deterministic responses from the verified project
+dataset, so playback does not depend on Gemini quota.
+
 ## Screenshots
 
 ### Ask a business question
