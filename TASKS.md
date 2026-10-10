@@ -219,8 +219,8 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Add practical public-API abuse protection and verify Gemini API key/quota restrictions
   - Global daily cap (default 5 questions, Pacific-midnight reset) implemented and tested; owner verified in Google AI Studio and Render: Auth key, Free tier, Gemini 3.7 Flash at 5 RPM / 250K TPM / 20 RPD, `GEMINI_MODEL=gemini-3.7-flash` and `GLOBAL_DAILY_QUERY_LIMIT=5` on Render.
 - [x] Block resource-amplification SQL and add a bounded result-size safeguard
-- [ ] Enforce TLS for PostgreSQL connections and verify production configuration
-  - TLS enforced in code for the app and setup scripts, and tested; pending deploy and owner verification in production.
+- [x] Enforce TLS for PostgreSQL connections and verify production configuration
+  - TLS (sslmode=require or stronger) enforced in code for the app and the setup scripts, and tested against Supabase; owner verified the TLS-enforcing commit is live on Render with READONLY_DATABASE_URL present. Not yet observed on a production query: the one attempted failed at Gemini before reaching the database.
 - [ ] Add frontend production security headers; finalise CSP after UI V2 assets are known
 - [ ] Add the project license and final legal/non-affiliation wording
 - [ ] Review optional hardening: production API docs, backend HSTS, metadata-disclosure functions and production dependency split
