@@ -34,7 +34,22 @@ Example questions (all from the benchmark suite):
 
 ## Screenshots
 
-<!-- Screenshots will be added after final production capture. -->
+### Ask a business question
+
+![DataPilot question workspace with example questions](docs/images/datapilot-home.png)
+
+### Analyze business results
+
+![DataPilot answer showing an AI insight, a Total Revenue KPI, the result table and the generated SQL](docs/images/datapilot-kpi.png)
+
+### Automatic visualization
+
+![DataPilot bar chart of revenue by product category with the result table](docs/images/datapilot-bar-chart.png)
+
+The first screenshot is from the live deployment. The result screenshots use the real DataPilot
+frontend with deterministic responses: the SQL ran against the project's real dataset through the
+app's validator and read-only executor, and only the Gemini step was replaced, so the documentation
+does not depend on external Gemini quota.
 
 ## Key Features
 
