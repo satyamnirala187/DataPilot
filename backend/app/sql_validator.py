@@ -44,6 +44,18 @@ BLOCKED_FUNCTION_PREFIXES = ("pg_", "lo_", "dblink")
 # not aggregated into one cell. Matched by SQLGlot type, so every spelling is caught (LPAD and
 # RPAD are both Pad; STRING_AGG is GroupConcat; GENERATE_SERIES in a SELECT list is
 # ExplodingGenerateSeries). jsonb_agg and array_fill are already rejected as unrecognised.
+# Rule 4c: session and server metadata (PostgreSQL version, role, database and schema names).
+# No DataPilot question needs them. Matched by SQLGlot type; CURRENT_DATE, CURRENT_TIMESTAMP and
+# NOW() are not metadata and stay allowed. inet_*(), pg_backend_pid() and current_setting() are
+# already rejected as unknown or pg_ functions.
+METADATA_FUNCTIONS = (
+    exp.CurrentVersion, exp.CurrentUser, exp.SessionUser,  # version(), current_user, session_user
+    exp.CurrentDatabase, exp.CurrentCatalog, exp.CurrentSchema, exp.CurrentSchemas,
+)
+# SQLGlot parses these keywords as bare column names, but PostgreSQL evaluates them as the session
+# role when unquoted and unqualified. No table in the schema has a column with either name.
+METADATA_KEYWORDS = frozenset({"user", "current_role"})
+
 AMPLIFYING_FUNCTIONS = (
     exp.Repeat, exp.Pad,  # repeat, lpad, rpad
     exp.GenerateSeries,  # generate_series
@@ -249,10 +261,16 @@ def _cte_name(cte: exp.CTE) -> str:
 
 
 def _check_functions(statement: exp.Expression) -> None:
+    for column in statement.find_all(exp.Column):
+        if not column.table and not column.this.args.get("quoted") and column.name.lower() in METADATA_KEYWORDS:
+            raise UnsafeSQLError(f"'{column.name.lower()}' is not allowed (it reveals database metadata).")
     for function in statement.find_all(exp.Func):
         if isinstance(function, AMPLIFYING_FUNCTIONS):
             name = function.sql(dialect="postgres").split("(", 1)[0].lower()
             raise UnsafeSQLError(f"Function '{name}' is not allowed (it can build very large results).")
+        if isinstance(function, METADATA_FUNCTIONS):
+            name = function.sql(dialect="postgres").split("(", 1)[0].lower()
+            raise UnsafeSQLError(f"Function '{name}' is not allowed (it reveals database metadata).")
         unrecognised = isinstance(function, exp.Anonymous)
         name = (function.name if unrecognised else function.sql_name()).lower()
         if name in BLOCKED_FUNCTIONS or name.startswith(BLOCKED_FUNCTION_PREFIXES):

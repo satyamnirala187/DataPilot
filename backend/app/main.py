@@ -20,7 +20,15 @@ MAX_QUESTION_LENGTH = 500
 # A 500-character question fits in well under 4 KB of JSON; anything far bigger is not a question.
 MAX_REQUEST_BODY_BYTES = 16 * 1024
 
-app = FastAPI(title=settings.app_name)
+API_DOCS_URLS = {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+
+
+def api_docs_urls(enabled: bool) -> dict[str, str | None]:
+    """FastAPI's docs routes, or None for each when they are switched off (they then return 404)."""
+    return API_DOCS_URLS if enabled else dict.fromkeys(API_DOCS_URLS)
+
+
+app = FastAPI(title=settings.app_name, **api_docs_urls(settings.enable_api_docs))
 
 # Middleware, innermost first (each add_middleware wraps everything added before it):
 #   LimitRequestBody      reject oversized bodies before they are read

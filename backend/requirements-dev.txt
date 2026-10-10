@@ -1,0 +1,4 @@
+# Local development: the runtime dependencies plus the test suite and the database seed script.
+-r requirements.txt
+pytest==9.1.1  # tests/
+faker==40.41.0  # database/seed.py

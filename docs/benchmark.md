@@ -197,7 +197,7 @@ judged, no score is shown.
 ## 10. Reproducing the Benchmark
 
 Prerequisites: Python with the backend dependencies installed
-(`pip install -r backend/requirements.txt` into `.venv`), and a project-root `.env` containing:
+(`pip install -r backend/requirements-dev.txt` into `.venv`), and a project-root `.env` containing:
 
 | Variable | Needed for |
 |---|---|

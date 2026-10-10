@@ -19,6 +19,10 @@ class Settings(BaseSettings):
 
     app_name: str = "DataPilot API"
 
+    # FastAPI's interactive docs (/docs, /redoc, /openapi.json). Off by default: the public API does
+    # not need them, so production exposes less. Set ENABLE_API_DOCS=true locally to use them.
+    enable_api_docs: bool = False
+
     # Browser origins allowed to call the API (CORS). Defaults to the local Vite dev server.
     # Override with a JSON list, e.g. CORS_ALLOWED_ORIGINS='["https://datapilot.example.com"]'.
     cors_allowed_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

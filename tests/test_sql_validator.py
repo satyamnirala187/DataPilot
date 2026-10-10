@@ -483,6 +483,57 @@ def test_correlated_lateral_subqueries_are_allowed(sql):
 
 
 @pytest.mark.parametrize("sql", [
+    "SELECT version()",
+    "SELECT VERSION() AS v",
+    "SELECT current_user",
+    "SELECT CURRENT_USER()",
+    "SELECT session_user",
+    "SELECT current_role",
+    "SELECT Current_Role AS r",
+    "SELECT user",
+    "SELECT USER",
+    "SELECT current_database()",
+    "SELECT current_catalog",
+    "SELECT current_schema",
+    "SELECT current_schema()",
+    "SELECT current_schemas(true)",
+    "SELECT c.city FROM customers c WHERE c.full_name = current_user",  # hidden in a filter
+    "WITH s AS (SELECT version() AS v) SELECT v FROM s",  # inside a CTE
+    "SELECT COUNT(*) AS n, MAX(session_user) FROM orders",  # beside business aggregates
+])
+def test_database_metadata_is_blocked(sql):
+    assert_blocked(sql, "reveals database metadata")
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT inet_server_addr()",
+    "SELECT inet_server_port()",
+    "SELECT inet_client_addr()",
+    "SELECT inet_client_port()",
+    "SELECT pg_backend_pid()",
+    "SELECT current_setting('server_version')",
+    "SELECT current_query()",
+])
+def test_other_server_metadata_functions_were_already_rejected(sql):
+    with pytest.raises(UnsafeSQLError):
+        validate_sql(sql)
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT CURRENT_DATE",
+    "SELECT CURRENT_TIMESTAMP",
+    "SELECT NOW()",
+    "SELECT LOCALTIMESTAMP",
+    "SELECT COUNT(*) FROM orders o WHERE o.order_date >= CURRENT_DATE - INTERVAL '30 days'",
+    "SELECT SUM(oi.quantity * oi.unit_price) AS revenue, AVG(oi.unit_price), MIN(oi.quantity), MAX(oi.quantity) FROM order_items oi",
+    'SELECT "user" FROM customers',  # a quoted identifier is a column, not the keyword
+    "SELECT s.user FROM (SELECT 1 AS user) AS s",  # so is a qualified one
+])
+def test_dates_aggregates_and_ordinary_columns_are_not_metadata(sql):
+    assert validate_sql(sql)
+
+
+@pytest.mark.parametrize("sql", [
     "WITH RECURSIVE n AS (SELECT 1 AS i UNION ALL SELECT i + 1 FROM n WHERE i < 12) SELECT i FROM n",
     "with recursive r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r) SELECT COUNT(*) FROM r",
     "SELECT * FROM (WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n FROM r) SELECT n FROM r) AS s",

@@ -32,7 +32,7 @@ Create the service from the Blueprint (`render.yaml`, **New → Blueprint**), or
 |---|---|
 | Runtime | Python 3 |
 | Root directory | `backend` |
-| Build command | `pip install -r requirements.txt` |
+| Build command | `pip install -r requirements.txt` (runtime packages only; pytest and Faker are in `requirements-dev.txt`) |
 | Start command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --no-proxy-headers` |
 | Health check path | `/health` |
 | Instance | one instance (the free plan is fine) |
@@ -50,6 +50,7 @@ Environment variables (names only; enter values in the Render dashboard):
 | `MAX_RESULT_BYTES` | no | default 1,000,000; larger answers are refused with 422 `result_too_large` |
 | `GLOBAL_DAILY_QUERY_LIMIT` | no | default 5 questions per Pacific day from all clients; set to `5` on Render. Size it to the Gemini quota: one question can use up to 4 Gemini requests |
 | `GEMINI_MODEL` | no | default `gemini-3.6-flash`; set explicitly on Render |
+| `ENABLE_API_DOCS` | no | leave unset in production: `/docs`, `/redoc` and `/openapi.json` then return 404 |
 
 Never set the admin `DATABASE_URL` on Render: it is only for the setup scripts in `database/`.
 

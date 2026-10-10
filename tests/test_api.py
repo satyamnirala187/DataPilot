@@ -120,8 +120,9 @@ def test_unexpected_error_gets_a_generic_500_without_details(pipeline):
     assert "hunter2" not in response.text and "Traceback" not in response.text
 
 
-def test_query_endpoint_is_listed_in_the_openapi_docs():
-    paths = client.get("/openapi.json").json()["paths"]
+def test_query_endpoint_is_listed_in_the_openapi_schema():
+    # The schema is still built even though the public /openapi.json route is off by default.
+    paths = main.app.openapi()["paths"]
     assert "post" in paths["/query"] and "get" in paths["/health"]
 
 

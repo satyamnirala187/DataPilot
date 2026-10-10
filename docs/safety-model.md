@@ -46,7 +46,8 @@ Before any model call, `backend/app/main.py`, `middleware.py`, `client_ip.py` an
 | Daily cap | At most `GLOBAL_DAILY_QUERY_LIMIT` questions (default **5**) per day from **all clients together**, so IP rotation cannot get round it. The day runs midnight to midnight Pacific time (DST-aware), matching Gemini's requests-per-day quota. It counts questions: one question can use up to 4 Gemini requests (3 SQL attempts and 1 insight), so 5 questions fit a 20-requests-per-day free tier. Checked after the per-client limit and request validation, before the pipeline: each admitted question uses one unit, whatever happens next; malformed or per-client-refused requests and `/health` use none. Over the cap: 429 `daily_limit_reached`, with `Retry-After` set to the seconds until the next Pacific midnight. The configured number is never shown or logged |
 | Client identity | `CF-Connecting-IP` (set by Cloudflare in front of Render) when `TRUST_CF_CONNECTING_IP=true`, otherwise the connecting address. `X-Forwarded-For` is never used, because clients control it. IPv6 clients are grouped per /64 |
 | CORS | Only origins listed in `CORS_ALLOWED_ORIGINS` (the production Vercel URL and localhost), only `GET`/`POST`, only the `Content-Type` header, no credentials, never `*` |
-| Security headers | Every response: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` |
+| Security headers | Every response: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, and `Strict-Transport-Security: max-age=31536000` (browsers then use only HTTPS for the API; no `includeSubDomains` or `preload`) |
+| API docs | FastAPI's `/docs`, `/redoc` and `/openapi.json` are off unless `ENABLE_API_DOCS=true`, so production exposes only `/health` and `/query`. This removes surface; it is not access control |
 | Error handling | Every error uses `{"error": {"code", "message"}}`. Unexpected exceptions become a generic 500 (still with CORS headers) and are logged by type and code location only |
 | Logging | One `key=value` summary line per question, with a random request ID (also sent as `X-Request-ID`), the outcome, stage timings and counts. Never the question text, the SQL, result rows, client IPs, secrets or provider error bodies (see `docs/architecture.md`, "Request logs") |
 
@@ -91,6 +92,7 @@ do not get through. If any check fails, the query is never sent to the database 
 | No cartesian joins | Every join needs `USING`, or an `ON` condition with an `AND`-ed equality linking a column of the joined table to a column of a table joined before it. `CROSS JOIN`, comma joins, `NATURAL JOIN`, `ON TRUE`, one-sided conditions (`ON o.order_id = o.order_id`, `ON oi.quantity > 0`) and `OR`-ed links are rejected; columns must be qualified to count. A `LATERAL` subquery is allowed only when its `WHERE` links one of its own tables to an outer one by such an equality (the latest-order-per-customer pattern); uncorrelated ones are rejected | `… JOIN order_items oi ON oi.quantity > 0` |
 | No recursion | `WITH RECURSIVE` is rejected; ordinary CTEs are fine | `WITH RECURSIVE r AS (…) SELECT …` |
 | No resource amplification | Functions that can build one huge value or many rows from a tiny query are blocked: `repeat`, `lpad`, `rpad`, `generate_series`, `string_agg`, `array_agg`, `json_agg`, `json_object_agg` (lists come back as rows instead). Relatives SQLGlot does not model (`jsonb_agg`, `array_fill`, …) are already rejected as unknown | `SELECT repeat('x', 300000000)` |
+| No database metadata | `version()`, `current_user`, `session_user`, `current_role`, `user`, `current_database()`, `current_catalog`, `current_schema` and `current_schemas()` are rejected, so answers cannot reveal the PostgreSQL version or role, database or schema names. `inet_*()`, `pg_backend_pid()` and `current_setting()` were already rejected. `CURRENT_DATE`, `CURRENT_TIMESTAMP` and `NOW()` stay allowed | `SELECT version()` |
 | Function blocklist | Blocks functions that sleep, read files or server state, change settings, run SQL from strings or reach outside the database: `pg_*`, `lo_*`, `dblink*`, `set_config`, `current_setting`, `nextval`, `setval`, `currval`, `query_to_xml` and related | `SELECT pg_sleep(10)` |
 | Unknown functions | Functions SQLGlot does not recognise are rejected unless explicitly listed as safe (`age`, `make_date`, `every`) | `SELECT my_func(order_id) FROM orders` |
 | Row limit | A missing `LIMIT` is added and a larger one is capped. Both become `LIMIT 501`: at most **500** rows are returned, and the extra row only tells the executor whether more existed. An explicit `LIMIT` of 501 or less is kept. `LIMIT` must be a whole number; `FETCH FIRST` is rejected | `… LIMIT (SELECT 10)`, `… FETCH FIRST 5 ROWS ONLY` |
@@ -100,7 +102,7 @@ What the validator does **not** do: it does not check column names or whether th
 semantically correct. An unknown column passes validation and then fails safely at the database
 (422 `query_failed`).
 
-The validator has 247 unit tests covering allowed and blocked cases, plus pipeline tests that feed
+The validator has 279 unit tests covering allowed and blocked cases, plus pipeline tests that feed
 it the SQL a fully manipulated model might return.
 
 ## 5. Database-level protection

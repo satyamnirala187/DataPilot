@@ -25,6 +25,9 @@ SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",  # no page may show the API in a frame (clickjacking)
     "Referrer-Policy": "no-referrer",
     "Cache-Control": "no-store",  # answers contain business data; do not keep copies
+    # Browsers that have seen this over HTTPS use only HTTPS for this origin for a year. They ignore
+    # it over plain HTTP (local development). No includeSubDomains or preload: only this host.
+    "Strict-Transport-Security": "max-age=31536000",
 }
 
 

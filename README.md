@@ -178,7 +178,8 @@ the same display. The full result table is always shown as well.
 DataPilot/
 ├── backend/
 │   ├── app/              FastAPI app, pipeline, NL-to-SQL, validator, executor, charts, insights
-│   └── requirements.txt
+│   ├── requirements.txt  runtime packages (what Render installs)
+│   └── requirements-dev.txt  runtime + pytest and Faker, for tests and seeding
 ├── frontend/
 │   ├── src/              React components, API client, formatting
 │   └── package.json
@@ -212,7 +213,7 @@ cd DataPilot
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -r backend/requirements.txt
+.venv/bin/pip install -r backend/requirements-dev.txt   # runtime packages plus pytest and Faker
 cp .env.example .env        # then fill in the values (see Environment Variables)
 ```
 
@@ -235,7 +236,8 @@ cd backend
 ../.venv/bin/uvicorn app.main:app --reload --port 8000
 ```
 
-Check `http://localhost:8000/health`; interactive API docs are at `http://localhost:8000/docs`.
+Check `http://localhost:8000/health`. For the interactive API docs at `http://localhost:8000/docs`,
+set `ENABLE_API_DOCS=true` in `.env`; they are off by default and in production.
 
 ### 3. Frontend
 
@@ -258,6 +260,7 @@ Backend (in the project-root `.env` locally, or in the Render dashboard):
 | `GEMINI_API_KEY` | Gemini API key |
 | `CORS_ALLOWED_ORIGINS` | optional; JSON list of browser origins allowed to call the API (defaults to the local Vite origins) |
 | `TRUST_CF_CONNECTING_IP` | optional; `true` only behind Cloudflare, as on Render, so rate limiting uses the real client IP |
+| `ENABLE_API_DOCS` | optional; `true` to serve `/docs`, `/redoc` and `/openapi.json` (default off) |
 | `GLOBAL_DAILY_QUERY_LIMIT` | optional; questions per day from all clients together (default 5). The day resets at midnight Pacific time, like Gemini's daily quota; one question can use up to 4 Gemini requests |
 | `DATABASE_URL` | admin connection for the setup scripts in `database/` only; not used by the running app |
 
