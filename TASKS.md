@@ -204,7 +204,7 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Improve Gemini 429 handling using quota/retry metadata when available, with a safe generic fallback
 - [x] Add minimal structured request observability
 - [x] Add reliability tests for timeout, retry, request-budget and observability behaviour
-- [ ] Run a controlled live Gemini reliability check
+- [x] Run a controlled live Gemini reliability check
 - [ ] Run the full live benchmark and record results
 - [ ] Commit Phase 16 reliability hardening
 
