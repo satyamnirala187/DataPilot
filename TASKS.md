@@ -208,6 +208,23 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [ ] Run the full live benchmark and record results
 - [ ] Commit Phase 16 reliability hardening
 
+## Phase 17 — Security, legal and release hardening
+
+- [x] Audit secrets, environment variables and the full Git history
+- [x] Audit routes, input validation, CORS, XSS, error handling, logging and debug settings
+- [x] Audit backend and frontend dependencies for known vulnerabilities
+- [x] Revoke Supabase anon/authenticated privileges on the six business tables, confirm the Data API is disabled, and add a database security check
+  - Supabase Data API confirmed disabled by project owner; anon/authenticated table privileges revoked and covered by database security tests.
+- [x] Harden ignore rules for environment files, private keys, dumps, backups, logs and IDE files
+- [ ] Add practical public-API abuse protection and verify Gemini API key/quota restrictions
+- [ ] Block resource-amplification SQL and add a bounded result-size safeguard
+- [ ] Enforce TLS for PostgreSQL connections and verify production configuration
+- [ ] Add frontend production security headers; finalise CSP after UI V2 assets are known
+- [ ] Add the project license and final legal/non-affiliation wording
+- [ ] Review optional hardening: production API docs, backend HSTS, metadata-disclosure functions and production dependency split
+- [ ] Run the final Phase 17 security regression and document residual risks
+- [ ] Commit Phase 17 security hardening
+
 ---
 
 ## Nice to have (only after all phases above are complete)

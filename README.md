@@ -224,6 +224,7 @@ On Windows, use `.venv\Scripts\` instead of `.venv/bin/`.
 .venv/bin/python database/apply_schema.py          # create the six tables (drops existing ones)
 .venv/bin/python database/seed.py                  # load the synthetic data
 .venv/bin/python database/create_readonly_role.py  # create the read-only role; writes READONLY_DATABASE_URL to .env
+.venv/bin/python database/revoke_api_roles.py      # Supabase: remove the Data API roles' access to the tables
 ```
 
 **Start the API:**

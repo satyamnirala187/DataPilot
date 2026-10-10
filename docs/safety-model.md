@@ -113,6 +113,14 @@ The API connects only with `READONLY_DATABASE_URL`, as the dedicated role `datap
   `idle_in_transaction_session_timeout = 15s` are set on the role itself, so they apply to every
   session even outside the app.
 
+**Supabase's Data API roles have no access.** Supabase grants its API roles (`anon`,
+`authenticated`) full privileges on new tables by default. DataPilot never uses the Data API, so
+`database/api_roles.sql` (run by `database/revoke_api_roles.py`) revokes every privilege those
+roles had on the six tables and their sequences, and removes them from the table owner's default
+privileges so recreated tables stay closed. The Data API itself is disabled in the Supabase
+dashboard (confirmed by the project owner), and the tables stay protected even if it is enabled by
+mistake. A database test checks the grants (`tests/test_database_privileges.py`).
+
 Two connection strings exist, with different jobs:
 
 | Variable | Role | Used by |

@@ -130,8 +130,8 @@ Middleware runs in this order for each request, outermost first: `SecurityHeader
 `RequestContext` → `CatchUnexpectedErrors` → `LimitRequestBody` → the route.
 
 Setup scripts live in `database/` (`schema.sql`, `seed.py`, `readonly_role.sql`,
-`create_readonly_role.py`, `apply_schema.py`). They use the admin connection and are never part of
-the running API.
+`create_readonly_role.py`, `apply_schema.py`, `api_roles.sql`, `revoke_api_roles.py`). They use the
+admin connection and are never part of the running API.
 
 ## 5. Frontend Structure
 

@@ -4,7 +4,8 @@
 -- freshly generated password and writes READONLY_DATABASE_URL to .env.
 --
 -- Re-run create_readonly_role.py after applying schema.sql: dropping and recreating the
--- tables also removes these grants.
+-- tables also removes these grants. On Supabase, also run revoke_api_roles.py once
+-- (api_roles.sql) so the Data API roles get no access to the tables.
 
 DO $$
 BEGIN

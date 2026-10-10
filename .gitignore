@@ -1,7 +1,42 @@
+# Python
 .venv/
-.env
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Node and build output
 node_modules/
 dist/
+
+# Environment files hold secrets; only the .example templates are tracked (any directory)
+.env
+.env.*
+!.env.example
+
+# Private keys and certificate bundles
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+id_ecdsa*
+
+# Database dumps and backups (the SQL sources in database/ stay tracked)
+*.dump
+*.dump.sql
+*.sql.gz
+*.sql.zip
+*.backup
+*.bak
+*.old
+
+# Logs
+*.log
+
+# Editors and OS metadata
+.vscode/
+.idea/
+*.swp
 .DS_Store
+Thumbs.db
