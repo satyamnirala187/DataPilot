@@ -8,7 +8,8 @@ services:
     plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    # One worker, so the in-memory rate limiter sees every request. Client addresses come from
+    # One worker, so the in-memory rate limiter sees every request and History's in-process cap of
+    # 5 database connections (app/history_store.py) matches datapilot_app's limit. Client addresses come from
     # app/client_ip.py (CF-Connecting-IP, set by Cloudflare), so uvicorn's X-Forwarded-For
     # handling is switched off: the app never relies on a header the client can forge.
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --no-proxy-headers

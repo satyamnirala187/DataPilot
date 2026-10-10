@@ -349,7 +349,9 @@ address in `CF-Connecting-IP` and overwrites any value a client sends.
 put anything at the start of that header. Only enable `TRUST_CF_CONNECTING_IP` where Cloudflare is
 really in front (as on Render); anywhere else a client could set the header itself.
 `--forwarded-allow-ips "*"` is not used; do not switch to it without a security review.
-`--workers 1` keeps one process, so the in-memory limiter sees every request.
+`--workers 1` keeps one process, so the in-memory limiter sees every request and History's
+in-process cap of 5 connections matches `datapilot_app`'s `CONNECTION LIMIT 5`. Revisit both
+before adding workers or instances.
 
 To verify after a deploy (no logging of IPs needed): send six blank questions from one network.
 The sixth should return 429 `too_many_requests`, while a request from a different network (for
@@ -379,7 +381,8 @@ the browser's developer tools (Network tab); search the logs for that ID to find
   `APP_DATABASE_URL` is not set; `failed` (a WARNING line, with `history_error`) means storing failed
   while the user still got the answer.
 - `event=history_unavailable` lines are History or Saved Reports requests that got 503, with the
-  endpoint and a fixed `cause` (`disabled`, `unavailable`, `timeout`, ...).
+  endpoint and a fixed `cause` (`disabled`, `busy`, `unavailable`, `timeout`, ...). `busy` means
+  all 4 connections the API may use stayed taken for 5 s; the fifth is kept for `/query`.
 - Unexpected errors log an ERROR line with the exception type, its request ID and a code-location
   traceback (no exception message).
 

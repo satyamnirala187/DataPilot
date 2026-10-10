@@ -23,11 +23,16 @@ Two error contracts:
                      HistoryUnavailable (with a safe kind) when it cannot be used, return None when
                      the analysis or report does not exist for the account, and save_report raises
                      AlreadySaved for an analysis that already has a report.
-Error kinds: disabled, invalid_configuration, unavailable, timeout, insert_failed, query_failed,
+Error kinds: disabled, invalid_configuration, busy, unavailable, timeout, insert_failed, query_failed,
 invalid_record, or for anything unexpected the exception's class name. None of them contains
 connection details, SQL, rows or the question.
+
+Connections are capped in this process (ConnectionSlots, below) to stay within datapilot_app's
+CONNECTION LIMIT, with one connection always kept for recording /query answers.
 """
 
+import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -207,7 +212,7 @@ def record_analysis(response: QueryResponse, *, account_id: str) -> HistoryResul
     """Store one successful answer for account_id. Never raises: History must not cost the user a
     valid answer."""
     try:
-        with _transaction(error_kind="insert_failed") as conn:
+        with _transaction(error_kind="insert_failed", recording=True) as conn:
             analysis_id = conn.execute(INSERT_ANALYSIS, _snapshot(response, account_id)).fetchone()[0]
     except HistoryUnavailable as error:
         return DISABLED if error.kind == "disabled" else HistoryResult("failed", error=error.kind)
@@ -300,13 +305,59 @@ def _stored_analysis(row: dict) -> StoredAnalysis:
                           created_at=row["created_at"])
 
 
+# --- Connection slots ------------------------------------------------------------------------------
+# datapilot_app may hold at most 5 connections (CONNECTION LIMIT 5, database/app_role.sql), but the
+# synchronous endpoints run in a thread pool, so more History requests than that can run at once.
+# A slot is taken before connecting and given back only after the connection is closed:
+#   - every connection needs one of MAX_CONNECTIONS slots;
+#   - the History and Saved Reports API may use at most MAX_API_CONNECTIONS of them, so busy API
+#     traffic always leaves one free for recording a /query answer.
+# Waiting is bounded: the API waits up to API_SLOT_WAIT_SECONDS, then answers 503 (kind "busy");
+# recording waits RECORD_SLOT_WAIT_SECONDS, then the answer is returned without History.
+# The counts are per process. That matches Render's single uvicorn worker (render.yaml); with more
+# workers or instances, each would need a share of the role's limit instead.
+MAX_CONNECTIONS = 5
+MAX_API_CONNECTIONS = MAX_CONNECTIONS - 1
+API_SLOT_WAIT_SECONDS = 5.0
+RECORD_SLOT_WAIT_SECONDS = 2.0
+
+
+class ConnectionSlots:
+    """How many datapilot_app connections this process may hold, in total and for the API."""
+
+    def __init__(self, total: int = MAX_CONNECTIONS, api: int = MAX_API_CONNECTIONS):
+        self._total = threading.BoundedSemaphore(total)
+        self._api = threading.BoundedSemaphore(api)
+
+    @contextmanager
+    def hold(self, *, api: bool, wait_seconds: float) -> Iterator[None]:
+        """Hold a slot (and an API slot first, if api) for the block, or raise HistoryUnavailable("busy")
+        after waiting wait_seconds in all. Every slot taken is given back, whatever happens."""
+        deadline = time.monotonic() + wait_seconds
+        taken = []
+        try:
+            for semaphore in ([self._api] if api else []) + [self._total]:
+                if not semaphore.acquire(timeout=max(0.0, deadline - time.monotonic())):
+                    raise HistoryUnavailable("busy")
+                taken.append(semaphore)
+            yield
+        finally:
+            for semaphore in reversed(taken):
+                semaphore.release()
+
+
+slots = ConnectionSlots()
+
+
 # --- One connection, one short transaction ---------------------------------------------------------
 
 @contextmanager
-def _transaction(*, read_only: bool = False, error_kind: str = "query_failed") -> Iterator[psycopg.Connection]:
+def _transaction(*, read_only: bool = False, error_kind: str = "query_failed",
+                 recording: bool = False) -> Iterator[psycopg.Connection]:
     """A connection as datapilot_app over TLS, inside one transaction that commits if the block
     succeeds and rolls back otherwise. Every failure becomes HistoryUnavailable with a safe kind;
-    error_kind is used when the database refuses a statement."""
+    error_kind is used when the database refuses a statement. recording (record_analysis only) may
+    use the slot the API cannot."""
     if settings.app_database_url is None:
         raise HistoryUnavailable("disabled")
     url = settings.app_database_url.get_secret_value()
@@ -314,26 +365,29 @@ def _transaction(*, read_only: bool = False, error_kind: str = "query_failed") -
         sslmode = tls_sslmode(url)
     except psycopg.Error:  # a malformed URL; its text is never passed on
         raise HistoryUnavailable("invalid_configuration") from None
-    try:
-        conn = psycopg.connect(url, connect_timeout=CONNECT_TIMEOUT_SECONDS, sslmode=sslmode)
-    except psycopg.Error:
-        # Connection errors can include host and user names, so none of it is kept.
-        raise HistoryUnavailable("unavailable") from None
 
-    try:
-        with conn:
-            conn.read_only = read_only  # reads also run in a READ ONLY transaction
-            with conn.transaction():
-                conn.execute("SELECT set_config('statement_timeout', %s, true)", (str(STATEMENT_TIMEOUT_MS),))
-                yield conn
-    except psycopg.errors.QueryCanceled:
-        raise HistoryUnavailable("timeout") from None
-    except psycopg.OperationalError:
-        raise HistoryUnavailable("unavailable") from None
-    except psycopg.Error:
-        # Refused by the database: a constraint (e.g. an over-long question), a privilege, ...
-        raise HistoryUnavailable(error_kind) from None
-    except ValidationError:  # a stored record that does not match the snapshot's shape
-        raise HistoryUnavailable("invalid_record") from None
-    except Exception as error:  # anything unexpected; only the class name is kept
-        raise HistoryUnavailable(type(error).__name__) from None
+    wait_seconds = RECORD_SLOT_WAIT_SECONDS if recording else API_SLOT_WAIT_SECONDS
+    with slots.hold(api=not recording, wait_seconds=wait_seconds):  # before connecting, until closed
+        try:
+            conn = psycopg.connect(url, connect_timeout=CONNECT_TIMEOUT_SECONDS, sslmode=sslmode)
+        except psycopg.Error:
+            # Connection errors can include host and user names, so none of it is kept.
+            raise HistoryUnavailable("unavailable") from None
+
+        try:
+            with conn:
+                conn.read_only = read_only  # reads also run in a READ ONLY transaction
+                with conn.transaction():
+                    conn.execute("SELECT set_config('statement_timeout', %s, true)", (str(STATEMENT_TIMEOUT_MS),))
+                    yield conn
+        except psycopg.errors.QueryCanceled:
+            raise HistoryUnavailable("timeout") from None
+        except psycopg.OperationalError:
+            raise HistoryUnavailable("unavailable") from None
+        except psycopg.Error:
+            # Refused by the database: a constraint (e.g. an over-long question), a privilege, ...
+            raise HistoryUnavailable(error_kind) from None
+        except ValidationError:  # a stored record that does not match the snapshot's shape
+            raise HistoryUnavailable("invalid_record") from None
+        except Exception as error:  # anything unexpected; only the class name is kept
+            raise HistoryUnavailable(type(error).__name__) from None

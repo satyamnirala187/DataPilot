@@ -228,7 +228,11 @@ Errors: 404 `analysis_not_found` or `report_not_found` (the same for an id that 
 that belongs to another account), 409 `already_saved` (one report per analysis), 400
 `invalid_request` (malformed id, limit or title), 429 `too_many_requests`, and 503
 `history_unavailable` whenever the History database cannot be used, including when
-`APP_DATABASE_URL` is not set: an empty list would wrongly say there is no History. There is no
+`APP_DATABASE_URL` is not set: an empty list would wrongly say there is no History.
+Connections are capped in the process at `datapilot_app`'s limit of 5, of which the API may use 4,
+so one is always free to record a `/query` answer; an API request that waits 5 s for a free
+connection gets the same 503 (`cause=busy`). The cap assumes the one uvicorn worker in
+`render.yaml`; more workers or instances would each need a share of the role's limit. There is no
 delete or edit in V1: `datapilot_app` has only `SELECT` and `INSERT`. Timestamps are ISO 8601 in UTC.
 
 **Production status:** live since Phase 19, with `APP_DATABASE_URL` set on Render; production
@@ -360,7 +364,7 @@ event=query_complete request_id=51c7d0e2a94b6f83 outcome=error status=429 error_
 - `insight_status` is `success`, `failed` (with `insight_error`), `skipped_budget` or
   `skipped_empty`.
 - `history_status` (successful answers only) is `saved`, `disabled` (no `APP_DATABASE_URL`) or
-  `failed` (with `history_error`: `unavailable`, `timeout`, `insert_failed`,
+  `failed` (with `history_error`: `busy`, `unavailable`, `timeout`, `insert_failed`,
   `invalid_configuration`, or an unexpected exception's type), plus `history_ms`. A `failed` History
   write keeps `outcome=success` but logs the line at WARNING. The `analysis_id` is not logged.
 
