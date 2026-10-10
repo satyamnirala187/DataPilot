@@ -230,11 +230,12 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 
 ## Phase 18 — Private demo access
 
-- [x] Backend login gate: `/auth/login`, `/auth/session`, `/auth/logout`, signed session tokens, per-client login limit, `/query` requires a session (committed locally, not deployed)
-- [x] Frontend login page, token handling and logout (committed locally, not deployed)
-- [ ] Documentation, Render secrets and deployment of backend and frontend together
-  - Deployment preparation documented (`render.yaml` keys, secret setup, rollout and Gemini-free verification in docs/deployment.md); secrets not yet set, nothing pushed.
-- [ ] Production verification of the login gate
+- [x] Backend login gate: `/auth/login`, `/auth/session`, `/auth/logout`, signed session tokens, per-client login limit, `/query` requires a session
+- [x] Frontend login page, token handling and logout
+- [x] Documentation, Render secrets and deployment of backend and frontend together
+  - Demo secrets set on Render by the project owner; backend and frontend deployed together.
+- [x] Production verification of the login gate
+  - Owner verified in the browser: login page shown, correct credentials open DataPilot, reload keeps the session, logout returns to login. Gemini-free API checks: `/health` 200, `POST /query` without a token 401 `unauthorized`, `/docs` and `/openapi.json` 404.
 
 ---
 
