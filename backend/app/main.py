@@ -1,5 +1,6 @@
 """DataPilot API entry point."""
 
+import time
 from datetime import UTC, datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -12,6 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app import auth
 from app.client_ip import client_ip
 from app.config import settings
+from app.history_store import record_analysis
 from app.middleware import CatchUnexpectedErrors, LimitRequestBody, RequestContext, SecurityHeaders, error_response
 from app.query_service import QueryResponse, QueryServiceError, run_business_query
 from app.rate_limiter import DailyLimit, RateLimiter
@@ -219,15 +221,27 @@ def health() -> dict[str, str]:
 
 
 # Signed-in check first: a request without a valid session uses no rate-limit slot, no daily-cap
-# unit and never reaches Gemini or the database.
+# unit and never reaches Gemini or the database. (The `session` parameter reuses that same check's
+# result: FastAPI runs a dependency once per request.)
 @app.post("/query", response_model=QueryResponse,
           dependencies=[Depends(auth.require_session), Depends(enforce_rate_limit)])
-def query(body: QueryRequest, request: Request) -> QueryResponse:
-    """Answer a business question: generate SQL, validate it, run it read-only, return the rows."""
+def query(body: QueryRequest, request: Request, session: auth.Session = Depends(auth.require_session)) -> QueryResponse:
+    """Answer a business question: generate SQL, validate it, run it read-only, return the rows.
+    The answer is then stored as History; if that fails the answer is still returned, without an id."""
     metrics = query_metrics(request)
     metrics.question_length = len(body.question)  # the length only; the text is never logged
     enforce_daily_limit(metrics)
-    return run_business_query(body.question, metrics=metrics)
+    response = run_business_query(body.question, metrics=metrics)  # any failure raises: nothing is stored
+    return response.model_copy(update={"analysis_id": store_history(response, session, metrics)})
+
+
+def store_history(response: QueryResponse, session: auth.Session, metrics: QueryMetrics) -> str | None:
+    """Store a successful answer for the session's account (never its session id); the new
+    analysis id, or None. record_analysis never raises, so this cannot turn the answer into an error."""
+    with metrics.timed("history", time.monotonic):
+        result = record_analysis(response, account_id=session.account_id)
+    metrics.history_status, metrics.history_error = result.status, result.error
+    return result.analysis_id
 
 
 def enforce_daily_limit(metrics: QueryMetrics) -> None:

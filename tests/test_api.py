@@ -49,16 +49,18 @@ def test_health_still_works():
     assert response.json() == {"status": "ok", "service": "DataPilot API"}
 
 
-def test_query_success(pipeline):
+def test_query_success(pipeline, fake_history):
     response = client.post("/query", json={"question": "What is our total revenue?"})
     assert response.status_code == 200
-    assert response.json() == SUCCESS.model_dump()
+    # Exactly what the pipeline returned, plus the id of the History snapshot that stored it.
+    assert response.json() == SUCCESS.model_dump() | {"analysis_id": fake_history.ANALYSIS_ID}
     assert pipeline.questions == ["What is our total revenue?"]
 
 
 def test_query_response_fields(pipeline):
     body = client.post("/query", json={"question": "Revenue?"}).json()
-    assert set(body) == {"question", "sql", "columns", "rows", "row_count", "truncated", "visualization", "insight"}
+    assert set(body) == {"question", "sql", "columns", "rows", "row_count", "truncated", "visualization", "insight",
+                         "analysis_id"}
     assert body["visualization"] == {"type": "kpi", "x_key": None, "y_key": "revenue"}
 
 

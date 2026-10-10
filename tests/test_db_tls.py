@@ -89,13 +89,17 @@ def test_admin_scripts_require_tls_too(monkeypatch):
 
 
 def test_every_connection_in_the_repository_goes_through_a_tls_path():
-    # Only the two helpers (and the test fixture that reuses the app's rule) call psycopg.connect.
+    # Only these call psycopg.connect, each with sslmode from the TLS rule: the executor, the History
+    # store (tests/test_history_store.py checks its sslmode) and the setup scripts' helper.
     root = Path(__file__).resolve().parents[1]
     callers = sorted(
         str(path.relative_to(root)) for path in [*root.glob("backend/app/*.py"), *root.glob("database/*.py")]
         if "psycopg.connect(" in path.read_text(encoding="utf-8")
     )
-    assert callers == ["backend/app/db_executor.py", "database/apply_schema.py"]
+    assert callers == ["backend/app/db_executor.py", "backend/app/history_store.py", "database/apply_schema.py"]
+    for caller in callers:
+        source = (root / caller).read_text(encoding="utf-8")
+        assert all("sslmode=" in line for line in source.splitlines() if "psycopg.connect(" in line), caller
 
 
 needs_database = pytest.mark.skipif(settings.readonly_database_url is None,

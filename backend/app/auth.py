@@ -40,11 +40,20 @@ LOGIN_WINDOW_SECONDS = 15 * 60
 
 clock = time.time  # wall-clock Unix time; tests replace it
 
+# The one shared demo login is one account. Data that belongs to "whoever is signed in" (History,
+# Saved Reports) is stored under this id, so it survives logout and new sessions: a session id is
+# random per login and is never an owner. Not part of the token; every session has the same account.
+DEMO_ACCOUNT_ID = "demo"
+
 
 @dataclass(frozen=True)
 class Session:
     session_id: str
     expires_at: int  # Unix time in seconds
+
+    @property
+    def account_id(self) -> str:
+        return DEMO_ACCOUNT_ID
 
 
 class AuthError(Exception):

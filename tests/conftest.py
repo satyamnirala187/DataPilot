@@ -4,6 +4,7 @@ import pytest
 
 from app import auth, main
 from app.config import settings
+from app.history_store import HistoryResult
 from app.rate_limiter import DailyLimit
 
 
@@ -33,3 +34,28 @@ def signed_in():
     main.app.dependency_overrides[auth.require_session] = lambda: SIGNED_IN
     yield
     main.app.dependency_overrides.pop(auth.require_session, None)
+
+
+class FakeHistory:
+    """Stands in for app.history_store.record_analysis in every test, so no test ever writes History
+    to the real database (the local .env may hold a real APP_DATABASE_URL). It records each call
+    and returns .result: by default "saved" with ANALYSIS_ID. tests/test_history_store.py tests the
+    real store against a fake connection."""
+
+    ANALYSIS_ID = "00000000-0000-4000-8000-00000000c0de"
+
+    def __init__(self):
+        self.calls = []  # (response, account_id)
+        self.result = HistoryResult("saved", analysis_id=self.ANALYSIS_ID)
+
+    def __call__(self, response, *, account_id):
+        self.calls.append((response, account_id))
+        return self.result
+
+
+@pytest.fixture(autouse=True)
+def fake_history(monkeypatch):
+    """The /query endpoint stores History through main.record_analysis; every test gets the fake."""
+    fake = FakeHistory()
+    monkeypatch.setattr(main, "record_analysis", fake)
+    return fake

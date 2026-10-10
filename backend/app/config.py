@@ -52,7 +52,8 @@ class Settings(BaseSettings):
     readonly_database_url: SecretStr | None = None
     # Role datapilot_app, for History and Saved Reports only (schema datapilot; created by
     # database/create_app_role.py). It can read and add rows there and cannot see the business
-    # tables. Never used to run generated SQL. Not used by any code yet.
+    # tables. Used only by app/history_store.py, never to run generated SQL. Optional: without it
+    # History is disabled and answers are returned with analysis_id = null.
     app_database_url: SecretStr | None = None
     query_timeout_ms: int = 5000
     max_result_rows: int = 500

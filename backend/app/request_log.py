@@ -5,7 +5,7 @@ handlers and the query pipeline fill it in, and the middleware logs it once the 
 
   event=query_complete request_id=3f9c0a1b7d2e4c58 outcome=success status=200 question_length=26
   total_ms=842 gemini_sql_attempts=1 sql_ms=421 validation_ms=3 db_ms=91 rows=5 truncated=false
-  visualization=bar insight_status=success insight_ms=177
+  visualization=bar insight_status=success insight_ms=177 history_status=saved history_ms=38
 
 Only fixed vocabularies, counts and timings are logged. The question text, the generated SQL,
 result rows, connection details, API keys and provider error bodies never are.
@@ -67,6 +67,9 @@ class QueryMetrics:
     insight_status: str | None = None  # success, failed, skipped_budget or skipped_empty
     insight_error: str | None = None  # the insight error kind, or the exception type if unexpected
     insight_ms: int | None = None
+    history_status: str | None = None  # saved, failed or disabled (APP_DATABASE_URL not set)
+    history_error: str | None = None  # a fixed kind (unavailable, timeout, ...) or an exception class name
+    history_ms: int | None = None
 
     def fail(self, stage: str, cause: str) -> None:
         self.stage, self.cause = stage, cause
@@ -101,8 +104,8 @@ class QueryMetrics:
 def log_query_summary(metrics: QueryMetrics) -> None:
     if metrics.error_kind == "internal_error" or metrics.status is None:
         level = logging.ERROR
-    elif metrics.outcome == "error":
-        level = logging.WARNING
+    elif metrics.outcome == "error" or metrics.history_status == "failed":
+        level = logging.WARNING  # a History failure keeps the answer, but should still be noticed
     else:
         level = logging.INFO
     logger.log(level, "%s", metrics.summary())

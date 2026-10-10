@@ -54,6 +54,9 @@ class QueryResponse(BaseModel):
     truncated: bool
     visualization: Visualization  # chosen by fixed rules, never by the LLM
     insight: str | None  # None when there are no rows or the insight could not be generated
+    # The stored History snapshot of this answer (app.history_store), or None if it was not stored.
+    # Set by the /query endpoint after the pipeline has finished; the pipeline itself never sets it.
+    analysis_id: str | None = None
 
 
 class QueryServiceError(Exception):

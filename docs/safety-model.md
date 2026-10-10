@@ -134,7 +134,7 @@ Three connection strings exist, with different jobs:
 |---|---|---|
 | `DATABASE_URL` | admin | the setup scripts in `database/` only (schema, seed data, creating the read-only role). Not an application setting and not configured on Render |
 | `READONLY_DATABASE_URL` | `datapilot_readonly` | the running API, for every user query |
-| `APP_DATABASE_URL` | `datapilot_app` | planned: storing History and Saved Reports only (not used by any code yet). Never used for generated SQL |
+| `APP_DATABASE_URL` | `datapilot_app` | storing History only (`backend/app/history_store.py`; not yet set on Render). Never used for generated SQL |
 
 This layer protects the data **even if the validator had a bug**: a write is refused by the
 database itself. This was verified against the real database: `DELETE` and `UPDATE` attempts were
@@ -214,6 +214,7 @@ produce a misleading but read-only answer.
 | Database unreachable | 503 `database_unavailable` |
 | Unexpected backend exception | 500 `internal_error` with a generic message; details only in the server log |
 | Insight generation fails (any reason) | **not fatal**: the already successful result is returned with HTTP 200 and `insight: null` |
+| Storing History fails (any reason) | **not fatal**: the full result is returned with HTTP 200 and `analysis_id: null`; nothing is retried or rerun, and the log line has only a fixed error kind |
 
 Errors from the Gemini SDK are reduced to their HTTP status before anything is logged or returned,
 so provider messages, request details and the API key never reach the user.

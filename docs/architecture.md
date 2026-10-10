@@ -125,6 +125,7 @@ All backend code is in `backend/app/`.
 | `nl_to_sql.py` | The only code that asks Gemini for SQL: schema context, business definitions, SQL rules, untrusted-input rules, `generate_sql`, and `SQLGenerationError` |
 | `sql_validator.py` | `validate_sql`: the SQLGlot safety checks and `LIMIT` enforcement. No network or database access, so it is tested on its own |
 | `db_executor.py` | `execute_query`: runs approved SQL as the read-only role over TLS (always `sslmode=require` or stricter), with timeout and row and size caps; `to_json_value` converts PostgreSQL types; `QueryExecutionError` hides connection details |
+| `history_store.py` | `record_analysis`: stores a successful answer in `datapilot.analyses` as the `datapilot_app` role (`APP_DATABASE_URL`, TLS, short timeouts), with one fixed `INSERT` and bound parameters. Never raises: returns `saved` with the new id, `disabled` or `failed` |
 | `chart_selector.py` | `select_visualization` and the `Visualization` model (`type`, `x_key`, `y_key`) |
 | `insight_service.py` | `generate_insight`: the optional summary prompt, a 15-second timeout, output length checks, and `InsightError` |
 | `middleware.py` | Plain ASGI middleware: `RequestContext` (request ID and summary log line), `LimitRequestBody` (16 KB), `CatchUnexpectedErrors` (safe 500s that still carry CORS headers), `SecurityHeaders`, and `error_response` |
@@ -186,8 +187,8 @@ current `products.price` or `products.cost` changes later. Profit never uses `pr
 `SELECT` on the six tables and nothing else, no inherited privileges, a connection limit, and every
 session read-only by default with a 5-second statement timeout.
 
-**Application data (History and Saved Reports, in progress, not live yet):** DataPilot's own data
-will live apart from the business data, in schema `datapilot` (`database/app_schema.sql`):
+**Application data (History and Saved Reports, in progress, not live in production yet):** DataPilot's
+own data lives apart from the business data, in schema `datapilot` (`database/app_schema.sql`):
 
 | Table | Holds |
 |---|---|
@@ -199,7 +200,19 @@ string, `APP_DATABASE_URL`: `SELECT` and `INSERT` on those two tables only, no `
 and no access to the business tables. `datapilot_readonly`, which runs the generated SQL, has no
 access to schema `datapilot`. `schema.sql` never touches it, so reseeding the business data keeps
 every analysis and saved report. The schema and role exist in the hosted database and are verified
-by live tests; no backend code uses them yet.
+by live tests.
+
+**Automatic History recording (implemented, not yet deployed):** after `run_business_query` has
+returned a successful answer, the `/query` endpoint stores it with `history_store.record_analysis`
+and returns the new row's id as `analysis_id`. Only complete answers are stored, including those
+with no rows or no insight; any request that fails (login, validation, rate limits, Gemini,
+validator, database) stores nothing. The snapshot is exactly what the user received, so reopening it
+later never reruns Gemini or the SQL. Records belong to the account, not the session: the one shared
+demo login is account `demo` (`auth.DEMO_ACCOUNT_ID`), so History survives logout and new sessions.
+History is secondary to the answer: if storing fails or `APP_DATABASE_URL` is not set, the full
+answer is still returned with HTTP 200 and `analysis_id: null`. `APP_DATABASE_URL` is not yet set on
+Render, so production does not store History yet, and there is no History or Saved Reports API or
+screen yet.
 
 ## 7. Business Semantics
 
@@ -291,6 +304,7 @@ provider errors.
 | Query exceeds the statement timeout | HTTP 504 `query_timeout` |
 | Database unreachable | HTTP 503 `database_unavailable` |
 | Insight generation fails for any reason | HTTP 200 with the full result and `insight: null` |
+| Storing History fails, or `APP_DATABASE_URL` is not set | HTTP 200 with the full result and `analysis_id: null`; logged as `history_status=failed` or `disabled`, never with connection details |
 | No valid demo session (missing, expired, revoked or forged token) | HTTP 401 `unauthorized`; the frontend returns to the login page. No rate-limit slot, daily-cap unit, Gemini call or query is used |
 | Wrong demo username or password | HTTP 401 `invalid_credentials`, the same for either |
 | Too many login attempts from one client | HTTP 429 `too_many_login_attempts` with a `Retry-After` header |
@@ -322,6 +336,10 @@ event=query_complete request_id=51c7d0e2a94b6f83 outcome=error status=429 error_
 - `gemini_sql_attempts` is counted as attempts happen; `sql_ms` includes the waits between retries.
 - `insight_status` is `success`, `failed` (with `insight_error`), `skipped_budget` or
   `skipped_empty`.
+- `history_status` (successful answers only) is `saved`, `disabled` (no `APP_DATABASE_URL`) or
+  `failed` (with `history_error`: `unavailable`, `timeout`, `insert_failed`,
+  `invalid_configuration`, or an unexpected exception's type), plus `history_ms`. A `failed` History
+  write keeps `outcome=success` but logs the line at WARNING. The `analysis_id` is not logged.
 - Timings are whole milliseconds from a monotonic clock. Fields that do not apply are left out.
 
 The line never contains the question (only its length), the generated SQL, result rows, client
