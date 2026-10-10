@@ -215,6 +215,8 @@ def test_prompt_uses_the_dataset_reference_date_instead_of_current_date():
     "Never use information_schema, pg_catalog, auth, storage",
     "never invent tables or columns",
     "NULLIF",
+    "Never use CROSS JOIN",
+    "Never use STRING_AGG, ARRAY_AGG, JSON_AGG, REPEAT, LPAD, RPAD",
 ])
 def test_prompt_requires_read_only_postgres(text):
     assert text in SYSTEM_INSTRUCTION

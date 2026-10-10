@@ -88,6 +88,9 @@ do not get through. If any check fails, the query is never sent to the database 
 | Table allowlist | Only `customers`, `categories`, `products`, `orders`, `order_items`, `payments`, unqualified or in `public`; CTE names only where PostgreSQL scoping makes them visible | `SELECT * FROM users` |
 | No other schemas | No `pg_catalog`, `information_schema` or any other schema or catalog | `SELECT * FROM pg_catalog.pg_user` |
 | Tables and subqueries only in `FROM`/`JOIN` | No row-producing functions or `VALUES` lists as sources | `SELECT * FROM generate_series(1, 10)` |
+| No cartesian joins | Every join needs `USING`, or an `ON` condition with an `AND`-ed equality linking a column of the joined table to a column of a table joined before it. `CROSS JOIN`, comma joins, `NATURAL JOIN`, `ON TRUE`, one-sided conditions (`ON o.order_id = o.order_id`, `ON oi.quantity > 0`) and `OR`-ed links are rejected; columns must be qualified to count. A `LATERAL` subquery is allowed only when its `WHERE` links one of its own tables to an outer one by such an equality (the latest-order-per-customer pattern); uncorrelated ones are rejected | `… JOIN order_items oi ON oi.quantity > 0` |
+| No recursion | `WITH RECURSIVE` is rejected; ordinary CTEs are fine | `WITH RECURSIVE r AS (…) SELECT …` |
+| No resource amplification | Functions that can build one huge value or many rows from a tiny query are blocked: `repeat`, `lpad`, `rpad`, `generate_series`, `string_agg`, `array_agg`, `json_agg`, `json_object_agg` (lists come back as rows instead). Relatives SQLGlot does not model (`jsonb_agg`, `array_fill`, …) are already rejected as unknown | `SELECT repeat('x', 300000000)` |
 | Function blocklist | Blocks functions that sleep, read files or server state, change settings, run SQL from strings or reach outside the database: `pg_*`, `lo_*`, `dblink*`, `set_config`, `current_setting`, `nextval`, `setval`, `currval`, `query_to_xml` and related | `SELECT pg_sleep(10)` |
 | Unknown functions | Functions SQLGlot does not recognise are rejected unless explicitly listed as safe (`age`, `make_date`, `every`) | `SELECT my_func(order_id) FROM orders` |
 | Row limit | A missing `LIMIT` is added and a larger one is capped. Both become `LIMIT 501`: at most **500** rows are returned, and the extra row only tells the executor whether more existed. An explicit `LIMIT` of 501 or less is kept. `LIMIT` must be a whole number; `FETCH FIRST` is rejected | `… LIMIT (SELECT 10)`, `… FETCH FIRST 5 ROWS ONLY` |
@@ -97,7 +100,7 @@ What the validator does **not** do: it does not check column names or whether th
 semantically correct. An unknown column passes validation and then fails safely at the database
 (422 `query_failed`).
 
-The validator has 170 unit tests covering allowed and blocked cases, plus pipeline tests that feed
+The validator has 247 unit tests covering allowed and blocked cases, plus pipeline tests that feed
 it the SQL a fully manipulated model might return.
 
 ## 5. Database-level protection
@@ -145,6 +148,7 @@ that tables outside the six cannot be read.
 | Read-only transaction | always | the connection is set `read_only`, and the transaction is always rolled back, never committed |
 | Statement timeout | `QUERY_TIMEOUT_MS`, default **5,000 ms** | set per transaction, in addition to the role's 5 s default; returns 504 `query_timeout` |
 | Row cap | `MAX_RESULT_ROWS`, default **500** | fetches at most 501 rows; returns at most 500, and sets `truncated` only when a 501st row existed |
+| Result size | `MAX_RESULT_BYTES`, default **1,000,000** | the compact UTF-8 JSON of the columns and returned rows may not exceed this; a larger result is refused whole (422 `result_too_large`), never cut short, and the insight is not requested. Normal answers are far smaller: under 1 KB for every benchmark question, about 65 KB for a wide 500-row table |
 | Connect timeout | 5 s per connection attempt | psycopg makes one attempt per address the host resolves to, and each attempt has its own 5 s limit; an unreachable database gives 503 `database_unavailable` |
 | Safe values | always | PostgreSQL values (decimals, dates, UUIDs, …) are converted to JSON-safe values |
 | Safe errors | always | connection errors never include the URL, host or user; permission errors become 400 `query_not_allowed`; other SQL errors become 422 `query_failed` with a generic message |
@@ -154,6 +158,15 @@ producing more rows than needed; it asks for one row past the cap, so the execut
 the cap left anything out without a second query. The executor's cap holds on its own even if a
 query reached it by another path. As a result, `truncated` is true only when DataPilot's own
 500-row cap omitted rows: a question that asks for 10 rows, or for exactly 500, is not truncated.
+
+The size limit is the last of four layers against oversized results, and the weakest on its own: it
+is checked after PostgreSQL has produced the rows, the driver has received them and each row has
+been converted, so it stops DataPilot from serialising and returning a huge answer but cannot stop
+a huge value being built or held in memory.
+That is bounded first by the validator (no amplifying functions, cartesian joins or recursion),
+then by the 5 s statement timeout and the 501-row `LIMIT`. Nested string functions such as
+`replace(replace(…))` can still grow a value and are not blocked, because they have ordinary uses;
+those three layers bound them.
 
 ## 7. Prompt injection and malicious questions
 

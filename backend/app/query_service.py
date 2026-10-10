@@ -60,7 +60,7 @@ class QueryServiceError(Exception):
     """The pipeline failed. kind says where and why; the message is safe to show to users.
 
     Kinds: invalid_question, rate_limited, generation_unavailable, generation_timeout, generation_failed,
-    unsafe_sql, database_unavailable, query_timeout, query_not_allowed, query_failed.
+    unsafe_sql, database_unavailable, query_timeout, query_not_allowed, query_failed, result_too_large.
     """
 
     def __init__(self, kind: str, message: str, *, retry_after: int | None = None):
@@ -192,4 +192,7 @@ def _execution_error(kind: str) -> QueryServiceError:
         return QueryServiceError("query_timeout", "The query took too long to run. Try a narrower question.")
     if kind == "permission_denied":
         return QueryServiceError("query_not_allowed", "The query was refused by the database.")
+    if kind == "result_too_large":
+        return QueryServiceError("result_too_large",
+                                 "The query result is too large to return safely. Please ask a more specific question.")
     return QueryServiceError("query_failed", "The generated query could not be run. Please rephrase your question.")

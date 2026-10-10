@@ -46,9 +46,14 @@ ALLOWED = {
                    FROM order_items oi JOIN d ON d.order_id = oi.order_id GROUP BY oi.order_id)
         SELECT AVG(total) FROM r
     """,
-    "recursive cte": """
-        WITH RECURSIVE n AS (SELECT 1 AS i UNION ALL SELECT i + 1 FROM n WHERE i < 12)
-        SELECT i FROM n
+    "left join using": "SELECT o.order_id, p.amount FROM orders o LEFT JOIN payments p USING (order_id)",
+    "join on a compound condition": """
+        SELECT o.order_id FROM orders o
+        JOIN payments p ON p.order_id = o.order_id AND p.status = 'completed'
+    """,
+    "min, max and date grouping": """
+        SELECT DATE_TRUNC('month', order_date) AS month, MIN(order_date), MAX(order_date), COUNT(*)
+        FROM orders GROUP BY 1 ORDER BY 1
     """,
     "subquery": "SELECT * FROM customers WHERE customer_id IN (SELECT customer_id FROM orders WHERE status = 'returned')",
     "union": "SELECT city FROM customers UNION SELECT name FROM categories",
@@ -318,6 +323,179 @@ def test_malformed_sql_is_blocked(sql):
 def test_empty_input_is_blocked(sql):
     with pytest.raises(UnsafeSQLError):
         validate_sql(sql)
+
+
+# --- Resource amplification ------------------------------------------------------------
+
+@pytest.mark.parametrize("sql, name", [
+    ("SELECT repeat('x', 300000000)", "repeat"),
+    ("SELECT REPEAT('x', 300000000) AS big", "repeat"),
+    ("SELECT lpad('x', 300000000, 'x')", "lpad"),
+    ("SELECT Rpad('x', 300000000, 'x')", "rpad"),
+    ("SELECT generate_series(1, 100000000) AS n", "generate_series"),
+    ("SELECT string_agg(email, ',') FROM customers", "string_agg"),
+    ("SELECT array_agg(email) FROM customers", "array_agg"),
+    ("SELECT json_agg(email) FROM customers", "json_agg"),
+    ("SELECT json_object_agg(email, city) FROM customers", "json_object_agg"),
+])
+def test_amplifying_functions_are_blocked(sql, name):
+    assert_blocked(sql, f"Function '{name}' is not allowed")
+
+
+@pytest.mark.parametrize("sql", [
+    # hidden inside otherwise normal business SQL, a CTE, a subquery or a join condition
+    "SELECT c.name, repeat(c.name, 1000000) FROM categories c",
+    "WITH d AS (SELECT lpad(full_name, 100000000, '*') AS x FROM customers) SELECT x FROM d",
+    "SELECT * FROM customers WHERE city IN (SELECT rpad(city, 100000000) FROM customers)",
+    """SELECT o.order_id FROM orders o
+       JOIN order_items oi ON oi.order_id = o.order_id AND repeat('a', 9) = 'a'""",
+    "SELECT COUNT(*) FROM (SELECT generate_series(1, 1000000000) AS n) AS s",
+    "SELECT SUM(oi.quantity) AS units, string_agg(p.name, ',') AS names FROM order_items oi JOIN products p ON p.product_id = oi.product_id",
+])
+def test_amplifying_functions_are_blocked_anywhere(sql):
+    assert_blocked(sql, "is not allowed")
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT public.repeat('x', 3)",
+    "SELECT pg_catalog.lpad('x', 3)",
+    "SELECT jsonb_agg(email) FROM customers",
+    "SELECT array_fill(0, ARRAY[100000000])",
+    "SELECT string_to_table('a,b', ',')",
+])
+def test_other_spellings_and_relatives_are_rejected_as_unrecognised(sql):
+    assert_blocked(sql, "not recognised as safe")
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT 1 FROM orders o CROSS JOIN order_items oi",
+    "SELECT 1 FROM orders o, order_items oi",
+    "SELECT 1 FROM orders o, order_items oi WHERE oi.order_id = o.order_id",  # comma joins, even filtered
+    "SELECT 1 FROM orders o JOIN order_items oi ON TRUE",
+    "SELECT 1 FROM orders o JOIN order_items oi ON 1 = 1",
+    "SELECT 1 FROM orders NATURAL JOIN payments",
+    "SELECT 1 FROM orders o JOIN order_items oi",
+    "WITH a AS (SELECT * FROM orders CROSS JOIN customers) SELECT COUNT(*) FROM a",
+])
+def test_cartesian_joins_are_blocked(sql):
+    assert_blocked(sql, "no cross joins")
+
+
+JOIN_ON = "SELECT o.order_id FROM orders o JOIN order_items oi ON "
+
+
+@pytest.mark.parametrize("condition", [
+    "o.order_id = o.order_id",  # tests only the left side: every order_items row matches
+    "oi.order_id = oi.order_id",  # tests only the joined side
+    "o.order_id IS NOT NULL",
+    "oi.order_id IS NOT NULL",
+    "o.order_id > 0",
+    "oi.quantity > 0",
+    "OI.ORDER_ID = OI.ORDER_ID",  # unquoted names are case-insensitive
+    "Oi.order_id = oI.order_id",
+    "oi.order_id = o.order_id OR TRUE",  # the link is ORed away
+    "(oi.order_id = o.order_id OR oi.quantity > 0)",
+    "TRUE AND oi.quantity > 0",
+    "oi.order_id > o.order_id",  # links both sides, but not by equality
+    "order_id = oi.order_id",  # unqualified: cannot be attributed, so fails closed
+    "oi.order_id = (SELECT MAX(x.order_id) FROM orders x)",
+])
+def test_join_conditions_that_do_not_link_both_sides_are_blocked(condition):
+    assert_blocked(JOIN_ON + condition, "no cross joins")
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT 1 FROM orders o JOIN order_items o ON o.order_id = o.order_id",  # one alias for both sides
+    """SELECT 1 FROM orders o JOIN customers c ON c.customer_id = o.customer_id
+       JOIN payments p ON c.customer_id = o.customer_id""",  # the third table is never linked
+    "SELECT * FROM customers WHERE customer_id IN (SELECT o.customer_id FROM orders o JOIN payments p ON p.amount > 0)",
+])
+def test_unlinked_joins_are_blocked_in_any_position(sql):
+    assert_blocked(sql, "no cross joins")
+
+
+@pytest.mark.parametrize("sql", [
+    JOIN_ON + "oi.order_id = o.order_id",
+    JOIN_ON + "o.order_id = oi.order_id",
+    JOIN_ON + "oi.order_id = o.order_id AND oi.quantity > 0",
+    JOIN_ON + "(oi.quantity > 0 AND (oi.order_id = o.order_id))",
+    JOIN_ON + "OI.Order_Id = O.order_id",
+    "SELECT o.order_id FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id",
+    "SELECT o.order_id FROM orders o JOIN payments p USING (order_id)",
+    """SELECT c.name, SUM(oi.quantity) FROM order_items oi
+       JOIN products p ON p.product_id = oi.product_id
+       JOIN categories c ON c.category_id = p.category_id GROUP BY c.name""",
+    """SELECT cu.city FROM order_items oi JOIN orders o ON o.order_id = oi.order_id
+       JOIN customers cu ON cu.customer_id = o.customer_id""",  # links to the table joined just before
+    "SELECT orders.order_id FROM orders JOIN customers ON customers.customer_id = orders.customer_id",
+    "SELECT o2.order_id FROM orders o1 JOIN orders o2 ON o2.customer_id = o1.customer_id",
+    """SELECT t.items FROM orders o
+       JOIN (SELECT order_id, COUNT(*) AS items FROM order_items GROUP BY order_id) AS t ON t.order_id = o.order_id""",
+    """SELECT c.full_name FROM customers c LEFT JOIN LATERAL (
+           SELECT o.order_date FROM orders o WHERE o.customer_id = c.customer_id LIMIT 1) AS last ON TRUE""",
+])
+def test_joins_that_link_both_sides_are_allowed(sql):
+    assert validate_sql(sql)
+
+
+@pytest.mark.parametrize("sql", [
+    # A. uncorrelated CROSS JOIN LATERAL: every order paired with every order item
+    "SELECT o.order_id FROM orders o CROSS JOIN LATERAL (SELECT oi.order_item_id FROM order_items oi) x",
+    # B. the same with LEFT JOIN LATERAL ... ON TRUE
+    "SELECT o.order_id FROM orders o LEFT JOIN LATERAL (SELECT oi.order_item_id FROM order_items oi) x ON TRUE",
+    # C. uncorrelated aggregate over another business table
+    "SELECT c.customer_id, x.n FROM customers c CROSS JOIN LATERAL (SELECT COUNT(*) AS n FROM payments p) x",
+    # D. only the subquery's own aliases, even through an internal join
+    """SELECT o.order_id FROM orders o CROSS JOIN LATERAL (
+           SELECT oi.order_item_id FROM order_items oi JOIN products p ON p.product_id = oi.product_id
+           WHERE p.product_id = oi.product_id) x""",
+    # the outer table appears, but does not filter the inner rows
+    "SELECT o.order_id FROM orders o CROSS JOIN LATERAL (SELECT o.customer_id, oi.order_item_id FROM order_items oi) x",
+    "SELECT o.order_id FROM orders o CROSS JOIN LATERAL (SELECT oi.order_item_id FROM order_items oi WHERE o.order_id > 0) x",
+    "SELECT o.order_id FROM orders o CROSS JOIN LATERAL (SELECT oi.order_id FROM order_items oi WHERE oi.order_id = o.order_id OR TRUE) x",
+    # an inner alias that hides the outer one is not correlation
+    "SELECT c.customer_id FROM customers c CROSS JOIN LATERAL (SELECT c.customer_id FROM customers c WHERE c.customer_id = c.customer_id) x",
+    # correlation cannot be established for a UNION
+    """SELECT o.order_id FROM orders o CROSS JOIN LATERAL (
+           SELECT oi.order_id FROM order_items oi WHERE oi.order_id = o.order_id UNION SELECT 1) x""",
+])
+def test_uncorrelated_lateral_subqueries_are_blocked(sql):
+    assert_blocked(sql, "no cross joins")
+
+
+@pytest.mark.parametrize("sql", [
+    # B. latest order per customer with LEFT JOIN LATERAL ... ON TRUE
+    """SELECT c.customer_id, x.order_date FROM customers c
+       LEFT JOIN LATERAL (
+           SELECT o.order_date FROM orders o WHERE o.customer_id = c.customer_id
+           ORDER BY o.order_date DESC LIMIT 1) x ON TRUE""",
+    # C. correlated, with an internal join of its own
+    """SELECT c.customer_id, x.amount FROM customers c
+       LEFT JOIN LATERAL (
+           SELECT p.amount FROM orders o JOIN payments p ON p.order_id = o.order_id
+           WHERE o.customer_id = c.customer_id AND p.status = 'completed'
+           ORDER BY p.amount DESC LIMIT 1) x ON TRUE""",
+    # a correlated aggregate per row
+    "SELECT o.order_id, x.n FROM orders o CROSS JOIN LATERAL (SELECT COUNT(*) AS n FROM order_items oi WHERE oi.order_id = o.order_id) x",
+])
+def test_correlated_lateral_subqueries_are_allowed(sql):
+    assert validate_sql(sql)
+
+
+@pytest.mark.parametrize("sql", [
+    "WITH RECURSIVE n AS (SELECT 1 AS i UNION ALL SELECT i + 1 FROM n WHERE i < 12) SELECT i FROM n",
+    "with recursive r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r) SELECT COUNT(*) FROM r",
+    "SELECT * FROM (WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n FROM r) SELECT n FROM r) AS s",
+])
+def test_recursive_ctes_are_blocked(sql):
+    assert_blocked(sql, "WITH RECURSIVE is not allowed")
+
+
+def test_every_benchmark_reference_query_still_passes():
+    from tests.benchmark.ground_truth import GROUND_TRUTH_SQL
+
+    for case_id, sql in GROUND_TRUTH_SQL.items():
+        assert validate_sql(sql), case_id
 
 
 # --- SQLGlot-specific edge cases ---------------------------------------------------------

@@ -54,6 +54,7 @@ STATUS_BY_ERROR_KIND = {
     "unsafe_sql": 400,
     "query_not_allowed": 400,
     "query_failed": 422,
+    "result_too_large": 422,
     "rate_limited": 429,
     "daily_limit_reached": 429,
     "generation_failed": 502,

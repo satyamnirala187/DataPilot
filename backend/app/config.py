@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     readonly_database_url: SecretStr | None = None
     query_timeout_ms: int = 5000
     max_result_rows: int = 500
+    # Most bytes of JSON (columns + rows) one answer may return; larger results are refused, not
+    # cut short. Normal answers are far smaller: the benchmark's largest is under 1 KB and a wide
+    # 500-row table about 65 KB.
+    max_result_bytes: int = Field(default=1_000_000, ge=1)
 
     # Gemini, used to turn questions into SQL. The key is a SecretStr so it never appears in logs.
     gemini_api_key: SecretStr | None = None

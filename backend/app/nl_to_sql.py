@@ -91,7 +91,10 @@ SQL RULES
 - Use only the six tables above. Never use information_schema, pg_catalog, auth, storage or any
   other schema, and never invent tables or columns.
 - Do not join payments into revenue, profit or AOV queries; it duplicates order rows.
-- Use explicit JOIN ... ON conditions and short, clear table aliases.
+- Use explicit JOIN ... ON conditions and short, clear table aliases. Never use CROSS JOIN,
+  comma-separated tables in FROM or WITH RECURSIVE.
+- Return lists as one row per item. Never use STRING_AGG, ARRAY_AGG, JSON_AGG, REPEAT, LPAD, RPAD
+  or GENERATE_SERIES.
 - Select only the columns needed (avoid SELECT *) and give computed columns clear snake_case names.
 - Use NULLIF on any denominator that could be zero.
 - Filter dates with half-open ranges: order_date >= DATE 'start' AND order_date < DATE 'day after end'.

@@ -103,7 +103,8 @@ enforced by independent layers in code and in the database:
 3. **Allowlists**: only the six business tables, the `public` schema and safe functions.
 4. **No writes or admin SQL**: `INSERT`, `UPDATE`, `DELETE`, DDL, `GRANT`, row locks and multiple
    statements are rejected, including inside CTEs.
-5. **Bounded queries**: a `LIMIT` is added or capped, and at most 500 rows are returned.
+5. **Bounded queries**: a `LIMIT` is added or capped, at most 500 rows and 1 MB of results are
+   returned, and functions or joins that can blow up a result are rejected.
 6. **Read-only database role**: `SELECT` on the six tables only, so writes fail at the database even
    if validation had a bug.
 7. **Read-only transaction and timeout**: every query runs in a read-only, rolled-back transaction

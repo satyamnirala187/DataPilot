@@ -47,6 +47,7 @@ Environment variables (names only; enter values in the Render dashboard):
 | `GEMINI_API_KEY` | yes | Gemini API key |
 | `CORS_ALLOWED_ORIGINS` | yes | JSON list, see [CORS](#cors) |
 | `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS` | no | default 5 questions per 60 s per client |
+| `MAX_RESULT_BYTES` | no | default 1,000,000; larger answers are refused with 422 `result_too_large` |
 | `GLOBAL_DAILY_QUERY_LIMIT` | no | default 5 questions per Pacific day from all clients; set to `5` on Render. Size it to the Gemini quota: one question can use up to 4 Gemini requests |
 | `GEMINI_MODEL` | no | default `gemini-3.7-flash`; set explicitly on Render |
 
