@@ -213,20 +213,20 @@ The exact status values must match these definitions when the schema is written 
 
 ### Must have
 
-- [ ] Natural-language question input
-- [ ] Gemini-based NL → PostgreSQL SQL generation using the schema as context
-- [ ] SQLGlot-based safety validation (see Security Requirements)
-- [ ] Safe query execution against PostgreSQL
-- [ ] Generated SQL shown to the user
-- [ ] Results table
-- [ ] Automatic chart for suitable results, chosen by deterministic application rules (see below), with a table-only fallback
-- [ ] Short AI-generated business insight based on the returned rows
-- [ ] Clear, friendly errors (invalid question, rejected SQL, query timeout, no results)
-- [ ] Clickable example questions to help new users get started
-- [ ] Health-check endpoint for the backend
-- [ ] Synthetic dataset generation script
-- [ ] Unit tests for the SQL validator
-- [ ] Deployed frontend (Vercel) and backend (Render)
+- [x] Natural-language question input
+- [x] Gemini-based NL → PostgreSQL SQL generation using the schema as context
+- [x] SQLGlot-based safety validation (see Security Requirements)
+- [x] Safe query execution against PostgreSQL
+- [x] Generated SQL shown to the user
+- [x] Results table
+- [x] Automatic chart for suitable results, chosen by deterministic application rules (see below), with a table-only fallback
+- [x] Short AI-generated business insight based on the returned rows
+- [x] Clear, friendly errors (invalid question, rejected SQL, query timeout, no results)
+- [x] Clickable example questions to help new users get started
+- [x] Health-check endpoint for the backend
+- [x] Synthetic dataset generation script
+- [x] Unit tests for the SQL validator
+- [x] Deployed frontend (Vercel) and backend (Render)
 
 **Chart selection rules**
 
@@ -334,11 +334,11 @@ DataPilot v1 is complete when all of the following are true:
 
 - [ ] A user can open the public URL, type a business question and receive the generated SQL, a results table, a suitable chart and a short insight.
 - [ ] A representative set of example business questions (rankings, totals, trends, comparisons) produce correct answers.
-- [ ] Destructive or unsafe SQL is always rejected, which is shown by validator unit tests covering both allowed and blocked cases.
-- [ ] The backend connects to the database as a read-only role, so writes are impossible even if validation fails.
-- [ ] No secrets are present in the repository or the frontend bundle.
-- [ ] Errors (bad question, rejected SQL, timeout, empty results) are handled gracefully, with clear messages.
-- [ ] The frontend looks and feels like a professional SaaS product: clean layout, consistent styling, loading states and a responsive design.
-- [ ] Frontend (Vercel), backend (Render) and database (Supabase) are deployed and working together.
-- [ ] The README explains what the project is, how it works, how to run it locally and includes screenshots or a demo.
+- [x] Destructive or unsafe SQL is always rejected, which is shown by validator unit tests covering both allowed and blocked cases.
+- [x] The backend connects to the database as a read-only role, so writes are impossible even if validation fails.
+- [x] No secrets are present in the repository or the frontend bundle.
+- [x] Errors (bad question, rejected SQL, timeout, empty results) are handled gracefully, with clear messages.
+- [x] The frontend looks and feels like a professional SaaS product: clean layout, consistent styling, loading states and a responsive design.
+- [x] Frontend (Vercel), backend (Render) and database (Supabase) are deployed and working together.
+- [x] The README explains what the project is, how it works, how to run it locally and includes screenshots or a demo.
 - [ ] The owner can explain the full architecture, the safety model and every major design decision without notes.

@@ -3,8 +3,8 @@
 Each of the 15 Security Requirements in `PROJECT.md` §9, where it is enforced, and the tests
 that prove it. Reviewed on 2026-10-09 against the code at the end of Phase 11.
 
-Status: **Met** = enforced in code and tested. **Met locally** = enforced; the production value
-is set during deployment (Phase 13) and must be re-checked there.
+Status: **Met** = enforced in code and tested. Production deployment (Phase 13) is complete, and
+the deployment-dependent requirements (10 and 11) were re-checked in production.
 
 ## SQL validation (application layer, SQLGlot)
 
@@ -33,8 +33,8 @@ could return and checks that the executor is never called.
 
 | # | Requirement | Status | Where | Evidence |
 |---|---|---|---|---|
-| 10 | Secrets stay server-side | Met locally | `.env` is git-ignored; `SecretStr` settings; the frontend only has `VITE_API_BASE_URL` | full git-history scan (Phase 11): no keys, URLs or `.env` files committed; Render settings checked in Phase 13 |
-| 11 | Restricted CORS | Met locally | `CORS_ALLOWED_ORIGINS` setting (default: localhost Vite); no `*`, no credentials | `test_api.py` and `test_security.py` CORS tests, including unexpected 500s; deployed origin added in Phase 13 |
+| 10 | Secrets stay server-side | Met | `.env` is git-ignored; `SecretStr` settings; the frontend only has `VITE_API_BASE_URL` | full git-history scan (Phase 11): no keys, URLs or `.env` files committed; production (Phase 13): secrets are set only as Render environment variables, and a scan of the deployed frontend bundle found none |
+| 11 | Restricted CORS | Met | `CORS_ALLOWED_ORIGINS` setting (default: localhost Vite); no `*`, no credentials | `test_api.py` and `test_security.py` CORS tests, including unexpected 500s; production (Phase 13): the Vercel origin is configured and the live frontend calls the API successfully |
 | 12 | Input limits | Met | `QueryRequest`: 1–500 characters, unknown fields rejected; 16 KB request body cap | `test_invalid_request_bodies_are_rejected_before_the_pipeline`, oversized-body tests |
 | 13 | Safe error messages | Met | one `{"error": {code, message}}` shape for every error; `CatchUnexpectedErrors`; sanitized Gemini and database errors | `test_unexpected_500_is_safe_...`, Gemini/database sanitization tests, framework 404/405 tests |
 | 14 | Basic rate limiting | Met | `RateLimiter` on `POST /query`: 5 per 60 s per client IP (configurable); `/health` not limited | `tests/test_rate_limiter.py`, rate-limit tests in `test_security.py` |
@@ -47,6 +47,6 @@ could return and checks that the executor is never called.
   identified by Cloudflare's `CF-Connecting-IP` (`app/client_ip.py`, enabled with
   `TRUST_CF_CONNECTING_IP=true`), never by the client-controlled `X-Forwarded-For`. See
   `docs/deployment.md` for how to verify it after a deploy.
-- A live prompt-injection check through Gemini (Phase 8's `/docs` test) is still pending because
-  of Gemini rate limits. The tests above assume the worst case instead: a model that obeys the
-  injection completely.
+- Phase 8 is complete; its production `/docs` check used a normal revenue question. A live
+  prompt-injection check through Gemini has not been run yet, because of Gemini rate limits. The
+  tests above assume the worst case instead: a model that obeys the injection completely.
