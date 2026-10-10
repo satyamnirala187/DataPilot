@@ -243,7 +243,8 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
   - Schema `datapilot` (tables `analyses`, `saved_reports`) and writer role `datapilot_app` applied to Supabase with `create_app_role.py`; `APP_DATABASE_URL` in local `.env` only. Catalog privileges verified by the live tests: `datapilot_app` has SELECT + INSERT only and nothing on the business tables; `datapilot_readonly`, PUBLIC, anon, authenticated and service_role have no access to the schema. A transactional writer test (insert, read back, UPDATE/DELETE/TRUNCATE and business-table access refused, over TLS) passed and was rolled back, leaving no rows.
 - [x] Automatic query history recording
   - Every successful `/query` answer is snapshotted to `datapilot.analyses` (account `demo`) and returned with its `analysis_id`. History failures are non-fatal: the full answer is still returned with `analysis_id: null`. Not deployed yet: `APP_DATABASE_URL` is only in the local `.env`, not on Render.
-- [ ] History and Saved Reports API
+- [x] History and Saved Reports API
+  - Five authenticated, account-scoped endpoints: `GET /history`, `GET /history/{id}`, `POST /saved-reports`, `GET /saved-reports`, `GET /saved-reports/{id}`. Reads use the stored snapshots only (no Gemini, no SQL rerun); a Saved Report saves an existing analysis by `analysis_id` with a title. No delete or edit endpoint in V1. Not production-live: `APP_DATABASE_URL` is still not set on Render.
 - [ ] Production deployment and verification
 
 ---

@@ -43,7 +43,7 @@ Before any model call, `backend/app/main.py`, `middleware.py`, `client_ip.py` an
 | Request shape | `POST /query` accepts JSON with exactly one field, `question`; extra fields, wrong types and malformed JSON get 400 |
 | Question length | **1–500 characters**; a whitespace-only question is rejected before Gemini is called |
 | Demo access | `POST /query` requires a session from the one shared demo login. `POST /auth/login` checks the username and password on the backend (constant-time, and the same 401 whichever is wrong) and returns a token signed with HMAC-SHA256 that expires after 2 hours; the frontend keeps it in `sessionStorage` and sends it as `Authorization: Bearer`. Without a valid token `/query` returns 401 before the rate limit, the daily cap, Gemini or the database. Logins are limited to 5 per 15 minutes per client. No cookies, user database or Supabase Auth. Logout revocations are kept in memory (a restart forgets them); changing `DEMO_SESSION_SECRET` ends every session. If the secrets are missing, login is unavailable and every question is refused |
-| Rate limit | **5 questions per 60 seconds per client** on `POST /query` (configurable); 429 `too_many_requests` with `Retry-After`. `/health` is not limited |
+| Rate limit | **5 questions per 60 seconds per client** on `POST /query` (configurable); 429 `too_many_requests` with `Retry-After`. The History and Saved Reports endpoints (not deployed yet) have their own limit, 60 requests per minute per client, after the session check; they never touch the `/query` limit or the daily cap. `/health` is not limited |
 | Daily cap | At most `GLOBAL_DAILY_QUERY_LIMIT` questions (default **5**) per day from **all clients together**, so IP rotation cannot get round it. The day runs midnight to midnight Pacific time (DST-aware), matching Gemini's requests-per-day quota. It counts questions: one question can use up to 4 Gemini requests (3 SQL attempts and 1 insight), so 5 questions fit a 20-requests-per-day free tier. Checked after the per-client limit and request validation, before the pipeline: each admitted question uses one unit, whatever happens next; malformed or per-client-refused requests and `/health` use none. Over the cap: 429 `daily_limit_reached`, with `Retry-After` set to the seconds until the next Pacific midnight. The configured number is never shown or logged |
 | Client identity | `CF-Connecting-IP` (set by Cloudflare in front of Render) when `TRUST_CF_CONNECTING_IP=true`, otherwise the connecting address. `X-Forwarded-For` is never used, because clients control it. IPv6 clients are grouped per /64 |
 | CORS | Only origins listed in `CORS_ALLOWED_ORIGINS` (the production Vercel URL and localhost), only `GET`/`POST`, only the `Content-Type` header, no credentials, never `*` |
@@ -134,7 +134,7 @@ Three connection strings exist, with different jobs:
 |---|---|---|
 | `DATABASE_URL` | admin | the setup scripts in `database/` only (schema, seed data, creating the read-only role). Not an application setting and not configured on Render |
 | `READONLY_DATABASE_URL` | `datapilot_readonly` | the running API, for every user query |
-| `APP_DATABASE_URL` | `datapilot_app` | storing History only (`backend/app/history_store.py`; not yet set on Render). Never used for generated SQL |
+| `APP_DATABASE_URL` | `datapilot_app` | History and Saved Reports only (`backend/app/history_store.py`; not yet set on Render). Never used for generated SQL |
 
 This layer protects the data **even if the validator had a bug**: a write is refused by the
 database itself. This was verified against the real database: `DELETE` and `UPDATE` attempts were
@@ -151,6 +151,10 @@ only the six tables in `public`; `datapilot_readonly` has no access to schema `d
 and the prompt never mentions them. `PUBLIC`, `anon` and `authenticated` have no access either.
 Tests cover each layer (`tests/test_sql_validator.py`, `tests/test_app_schema.py`, and live catalog
 checks against the hosted database in `tests/test_database_privileges.py`).
+The History and Saved Reports API (implemented locally, not deployed) only reads these snapshots and
+adds reports: every endpoint requires a demo session, every query is scoped to the session's account
+(a report through its analysis), the request body for saving accepts only an analysis id and a
+title, and nothing it does calls Gemini or runs SQL against the business tables.
 
 ## 6. Execution limits
 

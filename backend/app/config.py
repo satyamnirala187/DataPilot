@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     # Role datapilot_app, for History and Saved Reports only (schema datapilot; created by
     # database/create_app_role.py). It can read and add rows there and cannot see the business
     # tables. Used only by app/history_store.py, never to run generated SQL. Optional: without it
-    # History is disabled and answers are returned with analysis_id = null.
+    # answers are returned with analysis_id = null and the History API returns 503.
     app_database_url: SecretStr | None = None
     query_timeout_ms: int = 5000
     max_result_rows: int = 500

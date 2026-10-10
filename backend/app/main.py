@@ -1,23 +1,28 @@
 """DataPilot API entry point."""
 
 import time
+import unicodedata
 from datetime import UTC, datetime
+from typing import Annotated
+from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import auth
 from app.client_ip import client_ip
 from app.config import settings
-from app.history_store import record_analysis
+from app.history_store import (AlreadySaved, AnalysisDetail, AnalysisSummary, HistoryUnavailable, SavedReport,
+                               SavedReportDetail, SavedReportSummary, get_analysis, get_saved_report, list_history,
+                               list_saved_reports, record_analysis, save_report)
 from app.middleware import CatchUnexpectedErrors, LimitRequestBody, RequestContext, SecurityHeaders, error_response
 from app.query_service import QueryResponse, QueryServiceError, run_business_query
 from app.rate_limiter import DailyLimit, RateLimiter
-from app.request_log import QueryMetrics, configure_logging
+from app.request_log import QueryMetrics, configure_logging, log_history_unavailable
 
 configure_logging()
 
@@ -62,6 +67,10 @@ rate_limiter = RateLimiter(settings.rate_limit_requests, settings.rate_limit_win
 login_limiter = RateLimiter(auth.LOGIN_ATTEMPTS, auth.LOGIN_WINDOW_SECONDS)
 daily_limit = DailyLimit(settings.global_daily_query_limit)
 DAILY_LIMIT_MESSAGE = "The service has reached its daily AI request limit. Please try again later."
+# The History and Saved Reports endpoints, per client, separate from both /query limits: they never
+# call Gemini, but each request opens a database connection.
+APP_DATA_REQUESTS_PER_MINUTE = 60
+app_data_limiter = RateLimiter(APP_DATA_REQUESTS_PER_MINUTE, 60)
 
 # HTTP status for each QueryServiceError kind. Anything unknown becomes a 500.
 STATUS_BY_ERROR_KIND = {
@@ -121,6 +130,56 @@ class LoginRejected(Exception):
         self.retry_after = retry_after
 
 
+class AppDataError(Exception):
+    """A History or Saved Reports request that cannot be answered. An id that does not exist and an id
+    that belongs to another account get the same 404, so the response never says which."""
+
+    RESPONSES = {
+        "analysis_not_found": (404, "This analysis was not found."),
+        "report_not_found": (404, "This saved report was not found."),
+        "already_saved": (409, "This analysis is already saved as a report."),
+        "too_many_requests": (429, "Too many requests. Please wait a moment and try again."),
+    }
+
+    def __init__(self, code: str, retry_after: int | None = None):
+        super().__init__(code)
+        self.code = code
+        self.retry_after = retry_after
+
+
+HISTORY_UNAVAILABLE_MESSAGE = "History is not available right now. Please try again later."
+MAX_TITLE_LENGTH = 120
+DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT = 50, 100
+ListLimit = Annotated[int, Query(ge=1, le=MAX_LIST_LIMIT)]
+
+
+class SaveReportRequest(BaseModel):
+    """Only an id and a title: the report's content is the stored analysis, never data from the client."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    analysis_id: UUID
+    title: str
+
+    @field_validator("title")
+    @classmethod
+    def clean_title(cls, title: str) -> str:
+        title = title.strip()
+        if not 1 <= len(title) <= MAX_TITLE_LENGTH:
+            raise ValueError(f"title must be 1-{MAX_TITLE_LENGTH} characters")
+        if any(unicodedata.category(char) == "Cc" for char in title):
+            raise ValueError("title must not contain control characters")
+        return title
+
+
+class HistoryList(BaseModel):
+    items: list[AnalysisSummary]
+
+
+class SavedReportList(BaseModel):
+    items: list[SavedReportSummary]
+
+
 class QueryRequest(BaseModel):
     # Unknown fields are rejected rather than silently ignored.
     model_config = ConfigDict(extra="forbid")
@@ -148,12 +207,31 @@ def handle_login_rejected(request: Request, error: LoginRejected) -> JSONRespons
     return error_response(status, error.code, message, headers=headers)
 
 
+@app.exception_handler(AppDataError)
+def handle_app_data_error(request: Request, error: AppDataError) -> JSONResponse:
+    status, message = AppDataError.RESPONSES[error.code]
+    headers = {"Retry-After": str(error.retry_after)} if error.retry_after else None
+    return error_response(status, error.code, message, headers=headers)
+
+
+@app.exception_handler(HistoryUnavailable)
+def handle_history_unavailable(request: Request, error: HistoryUnavailable) -> JSONResponse:
+    # The kind is a fixed word or an exception class name: never a URL, SQL or a database message.
+    log_history_unavailable(query_metrics(request).request_id, request.scope["route"].name, error.kind)
+    return error_response(503, "history_unavailable", HISTORY_UNAVAILABLE_MESSAGE)
+
+
+INVALID_QUERY_MESSAGE = f"Send JSON like {{\"question\": \"...\"}} with a question of 1-{MAX_QUESTION_LENGTH} characters."
+INVALID_REQUEST_MESSAGE = (f"The request is not valid. Check the id, the limit (1-{MAX_LIST_LIMIT}) "
+                           f"or the title (1-{MAX_TITLE_LENGTH} characters).")
+
+
 @app.exception_handler(RequestValidationError)
 def handle_invalid_request(request: Request, error: RequestValidationError) -> JSONResponse:
     metrics = query_metrics(request)
     metrics.error_kind = "invalid_request"
     metrics.fail("request", "invalid_request")
-    message = f"Send JSON like {{\"question\": \"...\"}} with a question of 1-{MAX_QUESTION_LENGTH} characters."
+    message = INVALID_QUERY_MESSAGE if request.url.path == "/query" else INVALID_REQUEST_MESSAGE
     return error_response(400, "invalid_request", message)
 
 
@@ -175,6 +253,12 @@ def enforce_rate_limit(request: Request) -> None:
         metrics.fail("app_rate_limit", "app_rate_limited")
         metrics.retry_after = retry_after
         raise HTTPException(status_code=429, headers={"Retry-After": str(retry_after)})
+
+
+def enforce_app_data_limit(request: Request) -> None:
+    retry_after = app_data_limiter.check(client_ip(request))
+    if retry_after is not None:
+        raise AppDataError("too_many_requests", retry_after=retry_after)
 
 
 def enforce_login_limit(request: Request) -> None:
@@ -250,3 +334,55 @@ def enforce_daily_limit(metrics: QueryMetrics) -> None:
         # Logged as cause=global_daily_limit; the configured limit is never shown or logged.
         metrics.fail("app_rate_limit", "global_daily_limit")
         raise QueryServiceError("daily_limit_reached", DAILY_LIMIT_MESSAGE, retry_after=retry_after)
+
+
+# --- History and Saved Reports -------------------------------------------------------------------
+# Read stored answers and save them as reports. Everything comes from datapilot.analyses and
+# datapilot.saved_reports (app/history_store.py): nothing here calls Gemini, regenerates SQL, runs a
+# stored query or uses the daily cap. Data belongs to the session's account, never to its session
+# id, so it survives logout. Signed-in check first, then the per-client limit: a request without a
+# valid session uses no slot. If the History database cannot be used: 503 history_unavailable.
+APP_DATA = [Depends(auth.require_session), Depends(enforce_app_data_limit)]
+Signed = Annotated[auth.Session, Depends(auth.require_session)]  # the same check's result, run once
+
+
+@app.get("/history", response_model=HistoryList, dependencies=APP_DATA)
+def history(session: Signed, limit: ListLimit = DEFAULT_LIST_LIMIT) -> HistoryList:
+    """The account's stored analyses, newest first: summaries without rows or SQL."""
+    return HistoryList(items=list_history(session.account_id, limit))
+
+
+@app.get("/history/{analysis_id}", response_model=AnalysisDetail, dependencies=APP_DATA)
+def history_detail(analysis_id: UUID, session: Signed) -> AnalysisDetail:
+    """One stored analysis, exactly as it was answered, with its saved report if any."""
+    analysis = get_analysis(session.account_id, analysis_id)
+    if analysis is None:
+        raise AppDataError("analysis_not_found")
+    return analysis
+
+
+@app.post("/saved-reports", response_model=SavedReport, status_code=201, dependencies=APP_DATA)
+def create_saved_report(body: SaveReportRequest, session: Signed) -> SavedReport:
+    """Save one of the account's analyses under a title. One report per analysis."""
+    try:
+        report = save_report(session.account_id, body.analysis_id, body.title)
+    except AlreadySaved:
+        raise AppDataError("already_saved") from None
+    if report is None:
+        raise AppDataError("analysis_not_found")
+    return report
+
+
+@app.get("/saved-reports", response_model=SavedReportList, dependencies=APP_DATA)
+def saved_reports(session: Signed, limit: ListLimit = DEFAULT_LIST_LIMIT) -> SavedReportList:
+    """The account's saved reports, most recently saved first: summaries without rows or SQL."""
+    return SavedReportList(items=list_saved_reports(session.account_id, limit))
+
+
+@app.get("/saved-reports/{report_id}", response_model=SavedReportDetail, dependencies=APP_DATA)
+def saved_report_detail(report_id: UUID, session: Signed) -> SavedReportDetail:
+    """One saved report with its full stored analysis."""
+    report = get_saved_report(session.account_id, report_id)
+    if report is None:
+        raise AppDataError("report_not_found")
+    return report

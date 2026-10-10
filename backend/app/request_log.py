@@ -123,6 +123,13 @@ def log_login(metrics: QueryMetrics) -> None:
                metrics.request_id, outcome, metrics.status, metrics.total_ms)
 
 
+def log_history_unavailable(request_id: str, endpoint: str, cause: str) -> None:
+    """A History or Saved Reports request answered 503: which endpoint and the store's error kind
+    only. Never the account, ids, titles, questions, SQL or connection details."""
+    logger.warning("event=history_unavailable request_id=%s endpoint=%s cause=%s",
+                   _format(request_id), _format(endpoint), _format(cause))
+
+
 def elapsed_ms(seconds: float) -> int:
     return max(0, round(seconds * 1000))
 

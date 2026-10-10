@@ -118,14 +118,14 @@ All backend code is in `backend/app/`.
 
 | Module | Responsibility |
 |---|---|
-| `main.py` | The FastAPI app: `GET /health`, `POST /query`, `POST /auth/login`, `GET /auth/session`, `POST /auth/logout`, the `QueryRequest` model, middleware order, exception handlers that map every error to `{"error": {"code", "message"}}`, and the `enforce_rate_limit` dependency |
+| `main.py` | The FastAPI app: `GET /health`, `POST /query`, `POST /auth/login`, `GET /auth/session`, `POST /auth/logout`, the History and Saved Reports endpoints (`GET /history`, `GET /history/{id}`, `POST /saved-reports`, `GET /saved-reports`, `GET /saved-reports/{id}`), the request models, middleware order, exception handlers that map every error to `{"error": {"code", "message"}}`, and the rate-limit dependencies |
 | `auth.py` | Private demo access: one shared login checked by the backend, short-lived HMAC-SHA256-signed bearer tokens (`v1.<expiry>.<session id>.<signature>`), in-memory logout revocation, and the `require_session` dependency that `/query` runs before anything else |
 | `config.py` | `Settings` (pydantic-settings): database URL, Gemini key and model, CORS origins, rate limit, timeouts, row cap. Secrets are `SecretStr`, so they never appear in logs |
 | `query_service.py` | The pipeline, `run_business_query`: generate → validate → execute → select visualization → optional insight. Defines `QueryResponse` and turns step failures into `QueryServiceError` kinds |
 | `nl_to_sql.py` | The only code that asks Gemini for SQL: schema context, business definitions, SQL rules, untrusted-input rules, `generate_sql`, and `SQLGenerationError` |
 | `sql_validator.py` | `validate_sql`: the SQLGlot safety checks and `LIMIT` enforcement. No network or database access, so it is tested on its own |
 | `db_executor.py` | `execute_query`: runs approved SQL as the read-only role over TLS (always `sslmode=require` or stricter), with timeout and row and size caps; `to_json_value` converts PostgreSQL types; `QueryExecutionError` hides connection details |
-| `history_store.py` | `record_analysis`: stores a successful answer in `datapilot.analyses` as the `datapilot_app` role (`APP_DATABASE_URL`, TLS, short timeouts), with one fixed `INSERT` and bound parameters. Never raises: returns `saved` with the new id, `disabled` or `failed` |
+| `history_store.py` | DataPilot's own data, as the `datapilot_app` role (`APP_DATABASE_URL`, TLS, 3-second statements, fixed SQL with bound parameters). `record_analysis` stores a successful answer and never raises (`saved` with the new id, `disabled` or `failed`); `list_history`, `get_analysis`, `save_report`, `list_saved_reports` and `get_saved_report` serve the API, scoped to an account, and raise `HistoryUnavailable` if the database cannot be used. The response models (`StoredAnalysis`, `AnalysisSummary`, ...) validate stored records before they are returned |
 | `chart_selector.py` | `select_visualization` and the `Visualization` model (`type`, `x_key`, `y_key`) |
 | `insight_service.py` | `generate_insight`: the optional summary prompt, a 15-second timeout, output length checks, and `InsightError` |
 | `middleware.py` | Plain ASGI middleware: `RequestContext` (request ID and summary log line), `LimitRequestBody` (16 KB), `CatchUnexpectedErrors` (safe 500s that still carry CORS headers), `SecurityHeaders`, and `error_response` |
@@ -210,9 +210,30 @@ validator, database) stores nothing. The snapshot is exactly what the user recei
 later never reruns Gemini or the SQL. Records belong to the account, not the session: the one shared
 demo login is account `demo` (`auth.DEMO_ACCOUNT_ID`), so History survives logout and new sessions.
 History is secondary to the answer: if storing fails or `APP_DATABASE_URL` is not set, the full
-answer is still returned with HTTP 200 and `analysis_id: null`. `APP_DATABASE_URL` is not yet set on
-Render, so production does not store History yet, and there is no History or Saved Reports API or
-screen yet.
+answer is still returned with HTTP 200 and `analysis_id: null`.
+
+**History and Saved Reports API (implemented and tested locally, not yet deployed):** every endpoint
+needs a demo session (checked first), then has its own limit of 60 requests per minute per client,
+separate from the `/query` limits and the daily cap. Everything is read from the stored snapshots:
+no endpoint calls Gemini, regenerates SQL, runs a stored query or uses the daily cap.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /history?limit=50` (1-100) | `{"items": [{"id", "question", "visualization_type", "row_count", "truncated", "created_at", "saved_report_id"}]}`, newest first; no rows or SQL |
+| `GET /history/{analysis_id}` | `{"id", "question", "sql", "columns", "rows", "row_count", "truncated", "visualization", "insight", "created_at", "saved_report": {"id", "title"} or null}`, the same field names as a `/query` answer |
+| `POST /saved-reports` with `{"analysis_id", "title"}` | 201 `{"id", "analysis_id", "title", "saved_at"}`. The title is trimmed, 1-120 characters, no control characters; no other fields are accepted, so a report's content is always the stored analysis |
+| `GET /saved-reports?limit=50` (1-100) | `{"items": [{"id", "analysis_id", "title", "question", "visualization_type", "row_count", "truncated", "saved_at", "analysis_created_at"}]}`, most recently saved first |
+| `GET /saved-reports/{report_id}` | `{"id", "title", "saved_at", "analysis": {...the stored analysis...}}` |
+
+Errors: 404 `analysis_not_found` or `report_not_found` (the same for an id that does not exist and one
+that belongs to another account), 409 `already_saved` (one report per analysis), 400
+`invalid_request` (malformed id, limit or title), 429 `too_many_requests`, and 503
+`history_unavailable` whenever the History database cannot be used, including when
+`APP_DATABASE_URL` is not set: an empty list would wrongly say there is no History. There is no
+delete or edit in V1: `datapilot_app` has only `SELECT` and `INSERT`. Timestamps are ISO 8601 in UTC.
+
+`APP_DATABASE_URL` is not yet set on Render, so production neither stores History nor serves this
+API yet, and there is no History or Saved Reports screen yet.
 
 ## 7. Business Semantics
 
@@ -305,6 +326,7 @@ provider errors.
 | Database unreachable | HTTP 503 `database_unavailable` |
 | Insight generation fails for any reason | HTTP 200 with the full result and `insight: null` |
 | Storing History fails, or `APP_DATABASE_URL` is not set | HTTP 200 with the full result and `analysis_id: null`; logged as `history_status=failed` or `disabled`, never with connection details |
+| History or Saved Reports API cannot use the database (or `APP_DATABASE_URL` is not set) | HTTP 503 `history_unavailable`; logged as `event=history_unavailable` with the endpoint and a fixed cause only |
 | No valid demo session (missing, expired, revoked or forged token) | HTTP 401 `unauthorized`; the frontend returns to the login page. No rate-limit slot, daily-cap unit, Gemini call or query is used |
 | Wrong demo username or password | HTTP 401 `invalid_credentials`, the same for either |
 | Too many login attempts from one client | HTTP 429 `too_many_login_attempts` with a `Retry-After` header |
@@ -340,6 +362,10 @@ event=query_complete request_id=51c7d0e2a94b6f83 outcome=error status=429 error_
   `failed` (with `history_error`: `unavailable`, `timeout`, `insert_failed`,
   `invalid_configuration`, or an unexpected exception's type), plus `history_ms`. A `failed` History
   write keeps `outcome=success` but logs the line at WARNING. The `analysis_id` is not logged.
+
+A History or Saved Reports request that gets 503 logs one WARNING line,
+`event=history_unavailable request_id=... endpoint=history_detail cause=timeout`: the endpoint's
+name and the store's error kind only, never ids, titles, questions, SQL or connection details.
 - Timings are whole milliseconds from a monotonic clock. Fields that do not apply are left out.
 
 The line never contains the question (only its length), the generated SQL, result rows, client
