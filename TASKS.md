@@ -216,7 +216,8 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Revoke Supabase anon/authenticated privileges on the six business tables, confirm the Data API is disabled, and add a database security check
   - Supabase Data API confirmed disabled by project owner; anon/authenticated table privileges revoked and covered by database security tests.
 - [x] Harden ignore rules for environment files, private keys, dumps, backups, logs and IDE files
-- [ ] Add practical public-API abuse protection and verify Gemini API key/quota restrictions
+- [x] Add practical public-API abuse protection and verify Gemini API key/quota restrictions
+  - Global daily cap (default 5 questions, Pacific-midnight reset) implemented and tested; owner verified in Google AI Studio and Render: Auth key, Free tier, Gemini 3.7 Flash at 5 RPM / 250K TPM / 20 RPD, `GEMINI_MODEL=gemini-3.7-flash` and `GLOBAL_DAILY_QUERY_LIMIT=5` on Render.
 - [ ] Block resource-amplification SQL and add a bounded result-size safeguard
 - [ ] Enforce TLS for PostgreSQL connections and verify production configuration
 - [ ] Add frontend production security headers; finalise CSP after UI V2 assets are known

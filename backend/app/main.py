@@ -11,7 +11,7 @@ from app.client_ip import client_ip
 from app.config import settings
 from app.middleware import CatchUnexpectedErrors, LimitRequestBody, RequestContext, SecurityHeaders, error_response
 from app.query_service import QueryResponse, QueryServiceError, run_business_query
-from app.rate_limiter import RateLimiter
+from app.rate_limiter import DailyLimit, RateLimiter
 from app.request_log import QueryMetrics, configure_logging
 
 configure_logging()
@@ -39,7 +39,14 @@ app.add_middleware(
 )
 app.add_middleware(SecurityHeaders)
 
+# Two separate limits on POST /query, checked before anything calls Gemini:
+#   1. rate_limiter (enforce_rate_limit dependency): per client, against bursts; runs first.
+#   2. daily_limit (in the endpoint): all clients together, per Pacific day; a safety brake on AI usage.
+#      Only well-formed requests that passed the first limit reach it, and each one it admits uses
+#      one unit, whatever happens next in the pipeline.
 rate_limiter = RateLimiter(settings.rate_limit_requests, settings.rate_limit_window_seconds)
+daily_limit = DailyLimit(settings.global_daily_query_limit)
+DAILY_LIMIT_MESSAGE = "The service has reached its daily AI request limit. Please try again later."
 
 # HTTP status for each QueryServiceError kind. Anything unknown becomes a 500.
 STATUS_BY_ERROR_KIND = {
@@ -48,6 +55,7 @@ STATUS_BY_ERROR_KIND = {
     "query_not_allowed": 400,
     "query_failed": 422,
     "rate_limited": 429,
+    "daily_limit_reached": 429,
     "generation_failed": 502,
     "generation_unavailable": 503,
     "generation_timeout": 503,
@@ -124,4 +132,13 @@ def query(body: QueryRequest, request: Request) -> QueryResponse:
     """Answer a business question: generate SQL, validate it, run it read-only, return the rows."""
     metrics = query_metrics(request)
     metrics.question_length = len(body.question)  # the length only; the text is never logged
+    enforce_daily_limit(metrics)
     return run_business_query(body.question, metrics=metrics)
+
+
+def enforce_daily_limit(metrics: QueryMetrics) -> None:
+    retry_after = daily_limit.acquire()
+    if retry_after is not None:
+        # Logged as cause=global_daily_limit; the configured limit is never shown or logged.
+        metrics.fail("app_rate_limit", "global_daily_limit")
+        raise QueryServiceError("daily_limit_reached", DAILY_LIMIT_MESSAGE, retry_after=retry_after)

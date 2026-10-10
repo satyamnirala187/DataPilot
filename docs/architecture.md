@@ -79,7 +79,8 @@ error JSON, which the frontend shows as an error panel.
    the URL in `VITE_API_BASE_URL`, with a 60-second timeout.
 3. **Checks before any AI call.** Middleware rejects bodies over 16 KB and only answers browser
    requests from the configured origins. `QueryRequest` accepts exactly one field, `question`,
-   of 1–500 characters. The rate limiter allows 5 questions per 60 seconds per client (configurable).
+   of 1–500 characters. The rate limiter allows 5 questions per 60 seconds per client, and a global
+   cap allows a fixed number of questions per Pacific day from all clients together (both configurable).
 4. **SQL generation.** `generate_sql` sends Gemini a system prompt containing the six-table schema,
    the business definitions and the SQL rules, with the user's question wrapped as untrusted data.
    Gemini must return structured JSON (`{"sql": ...}`). Transient failures (5xx, network) are
@@ -124,7 +125,7 @@ All backend code is in `backend/app/`.
 | `middleware.py` | Plain ASGI middleware: `RequestContext` (request ID and summary log line), `LimitRequestBody` (16 KB), `CatchUnexpectedErrors` (safe 500s that still carry CORS headers), `SecurityHeaders`, and `error_response` |
 | `request_log.py` | Logging setup, request IDs and `QueryMetrics`: the outcome, stage timings and Gemini attempt count of one request, logged as a single `key=value` line |
 | `client_ip.py` | `client_ip`: the rate-limit identity, from `CF-Connecting-IP` when `TRUST_CF_CONNECTING_IP` is on, otherwise the TCP peer. `X-Forwarded-For` is never used |
-| `rate_limiter.py` | `RateLimiter`: an in-memory sliding window per client |
+| `rate_limiter.py` | `RateLimiter`: an in-memory sliding window per client; `DailyLimit`: an in-memory count of questions per day (midnight to midnight Pacific time, like Gemini's quota) across all clients |
 
 Middleware runs in this order for each request, outermost first: `SecurityHeaders` → CORS →
 `RequestContext` → `CatchUnexpectedErrors` → `LimitRequestBody` → the route.
@@ -269,6 +270,7 @@ provider errors.
 | Database unreachable | HTTP 503 `database_unavailable` |
 | Insight generation fails for any reason | HTTP 200 with the full result and `insight: null` |
 | Too many questions from one client | HTTP 429 `too_many_requests` with a `Retry-After` header |
+| Daily question cap reached (all clients) | HTTP 429 `daily_limit_reached`, `Retry-After` until midnight Pacific time; the pipeline is not called |
 | Request body over 16 KB | HTTP 413 `request_too_large` |
 | Any unexpected server error | HTTP 500 `internal_error` with a generic message; the exception type and code location stay in the server log |
 
@@ -289,7 +291,7 @@ event=query_complete request_id=51c7d0e2a94b6f83 outcome=error status=429 error_
 
 - `error_kind` is the code the client received; `stage` (`request`, `app_rate_limit`, `sql`,
   `validation`, `db`, `internal`) and `cause` say where and why. Causes include `app_rate_limited`
-  (DataPilot's own limit) versus `gemini_rate_limited`, `gemini_unavailable`, `gemini_timeout`,
+  (DataPilot's per-client limit) and `global_daily_limit` (its daily cap) versus `gemini_rate_limited`, `gemini_unavailable`, `gemini_timeout`,
   `gemini_invalid_response`, `validator_rejected`, `db_timeout`, `db_unavailable` and
   `db_query_error`; an unexpected exception gives its type.
 - `gemini_sql_attempts` is counted as attempts happen; `sql_ms` includes the waits between retries.

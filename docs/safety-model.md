@@ -42,7 +42,8 @@ Before any model call, `backend/app/main.py`, `middleware.py`, `client_ip.py` an
 | Body size cap | Request bodies over **16 KB** are rejected with 413 before they are read into memory (checked from `Content-Length` and while streaming) |
 | Request shape | `POST /query` accepts JSON with exactly one field, `question`; extra fields, wrong types and malformed JSON get 400 |
 | Question length | **1–500 characters**; a whitespace-only question is rejected before Gemini is called |
-| Rate limit | **5 questions per 60 seconds per client** on `POST /query` (configurable); 429 with `Retry-After`. `/health` is not limited |
+| Rate limit | **5 questions per 60 seconds per client** on `POST /query` (configurable); 429 `too_many_requests` with `Retry-After`. `/health` is not limited |
+| Daily cap | At most `GLOBAL_DAILY_QUERY_LIMIT` questions (default **5**) per day from **all clients together**, so IP rotation cannot get round it. The day runs midnight to midnight Pacific time (DST-aware), matching Gemini's requests-per-day quota. It counts questions: one question can use up to 4 Gemini requests (3 SQL attempts and 1 insight), so 5 questions fit a 20-requests-per-day free tier. Checked after the per-client limit and request validation, before the pipeline: each admitted question uses one unit, whatever happens next; malformed or per-client-refused requests and `/health` use none. Over the cap: 429 `daily_limit_reached`, with `Retry-After` set to the seconds until the next Pacific midnight. The configured number is never shown or logged |
 | Client identity | `CF-Connecting-IP` (set by Cloudflare in front of Render) when `TRUST_CF_CONNECTING_IP=true`, otherwise the connecting address. `X-Forwarded-For` is never used, because clients control it. IPv6 clients are grouped per /64 |
 | CORS | Only origins listed in `CORS_ALLOWED_ORIGINS` (the production Vercel URL and localhost), only `GET`/`POST`, only the `Content-Type` header, no credentials, never `*` |
 | Security headers | Every response: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` |
@@ -217,8 +218,10 @@ Gemini only ever returns text to the backend. It cannot:
 - DataPilot is a portfolio and demo application, not a complete enterprise security platform.
 - There is no authentication or authorisation in v1; anyone with the URL can ask questions about
   the synthetic dataset.
-- The rate limiter is in memory: limits are per server process and reset on restart. Production
-  runs a single process.
+- The rate limiter and the daily cap are in memory: they are per server process and reset on
+  restart, and several instances would each keep their own counts. Production runs a single
+  process. They are best-effort safety brakes, not durable or distributed quotas; Gemini's own
+  project quota is the hard limit on AI usage.
 - Model output is probabilistic. The validator and the role stop unsafe SQL, but they cannot make a
   wrong-but-safe query correct; the SQL is shown so users can check it.
 - The validator checks structure, tables and functions, not columns or business meaning.

@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     rate_limit_requests: int = Field(default=5, ge=1)
     rate_limit_window_seconds: int = Field(default=60, ge=1)
 
+    # Global safety brake on AI usage: at most this many questions per Pacific day (Gemini's quota
+    # day) from all clients together (app/rate_limiter.py DailyLimit). It counts questions, not
+    # Gemini requests: one question can use up to 4 (3 SQL attempts + 1 insight), so 5 questions
+    # stay within a 20-requests-per-day free tier. Not Gemini's quota, which remains the hard
+    # limit. In memory, so a restart resets it.
+    global_daily_query_limit: int = Field(default=5, ge=1)
+
     # Read-only role used for every user query. The admin DATABASE_URL is deliberately not
     # defined here: it is only for the setup scripts in database/. SecretStr keeps the value
     # out of logs and error messages.
@@ -42,7 +49,7 @@ class Settings(BaseSettings):
 
     # Gemini, used to turn questions into SQL. The key is a SecretStr so it never appears in logs.
     gemini_api_key: SecretStr | None = None
-    gemini_model: str = "gemini-3.8-flash"
+    gemini_model: str = "gemini-3.7-flash"
 
 
 settings = Settings()

@@ -46,8 +46,9 @@ Environment variables (names only; enter values in the Render dashboard):
 | `READONLY_DATABASE_URL` | yes | read-only role via the session pooler, ending in `?sslmode=require` |
 | `GEMINI_API_KEY` | yes | Gemini API key |
 | `CORS_ALLOWED_ORIGINS` | yes | JSON list, see [CORS](#cors) |
-| `GEMINI_MODEL` | no | defaults to the model in `backend/app/config.py` |
 | `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS` | no | default 5 questions per 60 s per client |
+| `GLOBAL_DAILY_QUERY_LIMIT` | no | default 5 questions per Pacific day from all clients; set to `5` on Render. Size it to the Gemini quota: one question can use up to 4 Gemini requests |
+| `GEMINI_MODEL` | no | default `gemini-3.7-flash`; set explicitly on Render |
 
 Never set the admin `DATABASE_URL` on Render: it is only for the setup scripts in `database/`.
 
@@ -108,6 +109,30 @@ Everything from Phase 11 applies unchanged in production (see `docs/security-rev
 error JSON, no stack traces, security headers, restricted CORS, rate limiting, the 16 KB body cap,
 the SQL validator, the read-only role, the statement timeout and the row limit.
 
+**Two application limits, plus Google's.** The per-client limit (5 per 60 s) stops bursts from one
+visitor; the global daily cap (`GLOBAL_DAILY_QUERY_LIMIT`) bounds total AI usage per day, which
+IP rotation cannot get round. Its day resets at midnight Pacific time, like Gemini's
+requests-per-day quota. It counts questions, and one question can use up to 4 Gemini requests
+(3 SQL attempts and 1 insight), so 5 questions stay within 20 requests a day. Both limits live in
+the process's memory: a restart resets them, and more instances would each count separately. They
+are safety brakes, not a quota system; Google's quota is the hard limit.
+
+Production status, as checked by the project owner in Google AI Studio and the Render dashboard:
+
+- the production key is an Auth key, and the project is on the Free tier;
+- Gemini 3.7 Flash limits: 5 requests per minute, 250K tokens per minute, 20 requests per day;
+- Gemini 3.8 Flash allowed only 2 requests per day on this tier, too few for DataPilot, so Render
+  sets `GEMINI_MODEL=gemini-3.7-flash`;
+- Render sets `GLOBAL_DAILY_QUERY_LIMIT=5`.
+
+Keep the key limited to the Gemini API where Google's console allows it. If the project is ever
+billed, keep its quotas low and add a budget with alerts; budget alerts only notify, they do not
+stop spending.
+
+An IP-address restriction on the key is not recommended here: Render's outbound addresses are
+shared by many services in the region rather than dedicated to this one, and can change, so it
+would add little protection and could break production.
+
 **Client IPs behind Render's proxy.** The rate limiter counts requests per client IP. On Render the
 TCP peer (`request.client.host`) is a private `10.x` proxy address shared by every visitor, so it
 cannot identify clients. Requests reach Render through Cloudflare, which puts the real visitor
@@ -139,8 +164,9 @@ the browser's developer tools (Network tab); search the logs for that ID to find
 
 - `outcome=error` lines name the failure: `stage` and `cause` (for example `cause=gemini_timeout`,
   `cause=db_unavailable`), plus `error_kind`, the code the user saw.
-- `cause=app_rate_limited` is DataPilot's own 5-per-minute limit; `cause=gemini_rate_limited` is
-  Gemini's, with `limit_type` and `retry_after` when Gemini sent them.
+- `cause=app_rate_limited` is DataPilot's own 5-per-minute limit and `cause=global_daily_limit` its
+  daily cap; `cause=gemini_rate_limited` is Gemini's, with `limit_type` and `retry_after` when Gemini
+  sent them.
 - `gemini_sql_attempts=2` or `3` means Gemini returned 5xx or network errors and was retried.
 - `insight_status=skipped_budget` means SQL generation and the database used most of the 45 s
   budget, so the optional insight was skipped.
@@ -161,3 +187,4 @@ line with the TCP peer, which on Render is the internal proxy address, not the v
 | Questions return 429 with an AI-service limit message | Gemini's rate limit or quota was reached (`cause=gemini_rate_limited` in the logs); the rest of the app keeps working |
 | Questions return 503 "took too long" | Gemini did not answer within 20 s (`cause=gemini_timeout`) |
 | Everyone shares one rate limit | `TRUST_CF_CONNECTING_IP` is not `true` on Render; see "Client IPs" above |
+| Questions return 429 "daily AI request limit" | DataPilot's global daily cap was reached (`cause=global_daily_limit`); it reopens at midnight Pacific time or after a restart |

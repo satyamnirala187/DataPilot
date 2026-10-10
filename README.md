@@ -69,7 +69,7 @@ does not depend on external Gemini quota.
   result is still shown.
 - **Visible SQL** for every answer, with a Copy SQL button.
 - **Safe, structured errors** with friendly messages and no internal details.
-- **Per-client rate limiting** to protect the AI quota.
+- **Per-client rate limiting** and a **global daily question cap** to protect the AI quota.
 - **Responsive interface** for desktop and mobile.
 - **Deployed** on Vercel (frontend), Render (backend) and Supabase (database).
 - **Benchmark and regression suite** of 25 business questions with trusted answers.
@@ -257,6 +257,7 @@ Backend (in the project-root `.env` locally, or in the Render dashboard):
 | `GEMINI_API_KEY` | Gemini API key |
 | `CORS_ALLOWED_ORIGINS` | optional; JSON list of browser origins allowed to call the API (defaults to the local Vite origins) |
 | `TRUST_CF_CONNECTING_IP` | optional; `true` only behind Cloudflare, as on Render, so rate limiting uses the real client IP |
+| `GLOBAL_DAILY_QUERY_LIMIT` | optional; questions per day from all clients together (default 5). The day resets at midnight Pacific time, like Gemini's daily quota; one question can use up to 4 Gemini requests |
 | `DATABASE_URL` | admin connection for the setup scripts in `database/` only; not used by the running app |
 
 Frontend (`frontend/.env.local`):
@@ -329,7 +330,7 @@ debugging.
 
 - No authentication in v1; the app is a public demo over synthetic data.
 - The dataset is a synthetic e-commerce store, not real business data.
-- Rate limiting is in memory, so it is per server process and resets on restart.
+- Rate limiting and the daily cap are in memory, so they are per server process and reset on restart.
 - Gemini availability and quota can make AI requests temporarily unavailable.
 - Correct SQL for arbitrary, unseen questions is not guaranteed; the generated SQL is shown so it
   can be checked.
