@@ -280,7 +280,7 @@ def test_gemini_4xx_errors_are_not_retried(code, kind):
     assert gemini.calls == 1 and slept == []
 
 
-@pytest.mark.parametrize("failure", [http_error(500), http_error(503), ConnectionError("network down"), TimeoutError()])
+@pytest.mark.parametrize("failure", [http_error(500), http_error(503), ConnectionError("network down")])
 def test_gemini_5xx_and_network_errors_are_retried_then_succeed(failure):
     gemini, slept = FailingGemini(failure), []
     assert run_with(gemini, slept).sql == SAFE_SQL

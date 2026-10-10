@@ -20,7 +20,9 @@ import psycopg
 
 from app.config import settings
 
-CONNECT_TIMEOUT_SECONDS = 10
+# Applies to each psycopg connection attempt separately (one attempt per address the host
+# resolves to), so it bounds every attempt, not the total time spent connecting.
+CONNECT_TIMEOUT_SECONDS = 5
 
 
 @dataclass

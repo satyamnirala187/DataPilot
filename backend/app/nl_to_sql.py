@@ -7,6 +7,7 @@ reaches the executor. The prompt asks for safe SQL, but prompting alone cannot g
 
 import logging
 
+import httpx
 from google import genai
 from google.genai import errors, types
 from pydantic import BaseModel, ValidationError
@@ -14,6 +15,12 @@ from pydantic import BaseModel, ValidationError
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Longest one SQL-generation call may take. The SDK has no timeout of its own (it waits forever)
+# and no automatic retries unless asked; retries are decided once, in app.query_service.
+SQL_GENERATION_TIMEOUT_MS = 20_000
+# What a timed-out request raises: httpx's timeout errors (the SDK's HTTP client) or Python's own.
+TIMEOUT_ERRORS = (httpx.TimeoutException, TimeoutError)
 
 DATASET_REFERENCE_DATE = "2026-09-30"
 
@@ -109,10 +116,11 @@ class GeneratedSQL(BaseModel):
 
 class SQLGenerationError(Exception):
     """SQL could not be generated. kind is one of:
-    not_configured, invalid_question, unavailable, rate_limited, model_unavailable,
+    not_configured, invalid_question, unavailable, timeout, rate_limited, model_unavailable,
     request_failed, empty_response, invalid_response.
 
-    Only "unavailable" (5xx or network failure) is transient and worth retrying.
+    Only "unavailable" (5xx or a network failure) is transient and worth retrying. A "timeout"
+    already used the whole SQL_GENERATION_TIMEOUT_MS, so it is not retried.
 
     The message never contains the API key, request details or raw SDK errors.
     """
@@ -148,7 +156,11 @@ def generate_sql(question: str, *, client: genai.Client | None = None) -> str:
     except errors.APIError as error:
         # Only the status code is used: SDK messages can echo request details.
         raise _api_error(error.code) from None
-    except Exception:  # network failures, timeouts, unexpected SDK errors
+    except TIMEOUT_ERRORS:
+        raise SQLGenerationError(
+            "timeout", f"Gemini did not respond within {SQL_GENERATION_TIMEOUT_MS // 1000} s."
+        ) from None
+    except Exception:  # network failures, unexpected SDK errors
         raise SQLGenerationError("unavailable", "Could not reach the Gemini API.") from None
 
     if response.model_version and not response.model_version.startswith(settings.gemini_model):
@@ -160,7 +172,11 @@ def generate_sql(question: str, *, client: genai.Client | None = None) -> str:
 def _default_client() -> genai.Client:
     if settings.gemini_api_key is None:
         raise SQLGenerationError("not_configured", "GEMINI_API_KEY is not configured.")
-    return genai.Client(api_key=settings.gemini_api_key.get_secret_value())
+    # A finite timeout; no retry_options, so the SDK makes exactly one attempt per call.
+    return genai.Client(
+        api_key=settings.gemini_api_key.get_secret_value(),
+        http_options=types.HttpOptions(timeout=SQL_GENERATION_TIMEOUT_MS),
+    )
 
 
 def _api_error(code: int | None) -> SQLGenerationError:

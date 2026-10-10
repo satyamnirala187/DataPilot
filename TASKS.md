@@ -195,6 +195,19 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [ ] Practise explaining the architecture, safety model and design decisions without notes
 - [x] Final check against the Definition of a Successful Final Product (PROJECT.md §12)
 
+## Phase 16 — AI reliability and end-to-end hardening
+
+- [x] Audit Gemini failure handling, retries, timeouts and call counts
+- [x] Add a timeout to SQL-generation calls and keep each request within a fixed time budget below the frontend's 60 s timeout
+- [x] Retry SQL generation only on fast transient failures; never after a timeout or HTTP 429
+- [x] Skip the optional insight when the request budget is nearly exhausted, preserving the successful query result
+- [ ] Improve Gemini 429 handling using quota/retry metadata when available, with a safe generic fallback
+- [ ] Add minimal structured request observability
+- [ ] Add reliability tests for timeout, retry, request-budget and observability behaviour
+- [ ] Run a controlled live Gemini reliability check
+- [ ] Run the full live benchmark and record results
+- [ ] Commit Phase 16 reliability hardening
+
 ---
 
 ## Nice to have (only after all phases above are complete)

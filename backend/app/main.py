@@ -49,6 +49,7 @@ STATUS_BY_ERROR_KIND = {
     "rate_limited": 429,
     "generation_failed": 502,
     "generation_unavailable": 503,
+    "generation_timeout": 503,
     "database_unavailable": 503,
     "query_timeout": 504,
 }

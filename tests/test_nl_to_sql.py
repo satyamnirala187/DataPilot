@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from google.genai import errors
 from pydantic import SecretStr
@@ -144,7 +145,9 @@ def api_error(cls, code: int) -> errors.APIError:
     (api_error(errors.ServerError, 500), "unavailable"),
     (api_error(errors.ServerError, 503), "unavailable"),
     (ConnectionError(f"could not connect using {FAKE_KEY}"), "unavailable"),
-    (TimeoutError("read timed out"), "unavailable"),
+    (httpx.ConnectError(f"could not connect using {FAKE_KEY}"), "unavailable"),
+    (TimeoutError("read timed out"), "timeout"),
+    (httpx.ReadTimeout(f"read timed out using {FAKE_KEY}"), "timeout"),
 ])
 def test_gemini_failures_become_sanitised_errors(error, kind):
     raised = generation_error(error=error)
@@ -161,7 +164,8 @@ def test_api_key_is_never_shown_by_settings(monkeypatch):
 def test_real_client_receives_the_key(monkeypatch):
     seen = {}
     monkeypatch.setattr(settings, "gemini_api_key", SecretStr(FAKE_KEY))
-    monkeypatch.setattr(nl_to_sql.genai, "Client", lambda api_key: seen.setdefault("key", api_key) and client_returning("SELECT 1"))
+    monkeypatch.setattr(nl_to_sql.genai, "Client",
+                        lambda api_key, **kwargs: seen.setdefault("key", api_key) and client_returning("SELECT 1"))
     assert generate_sql("anything") == "SELECT 1"
     assert seen["key"] == FAKE_KEY
 

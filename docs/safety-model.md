@@ -135,7 +135,7 @@ that tables outside the six cannot be read.
 | Read-only transaction | always | the connection is set `read_only`, and the transaction is always rolled back, never committed |
 | Statement timeout | `QUERY_TIMEOUT_MS`, default **5,000 ms** | set per transaction, in addition to the role's 5 s default; returns 504 `query_timeout` |
 | Row cap | `MAX_RESULT_ROWS`, default **500** | fetches at most 501 rows; returns at most 500, and sets `truncated` only when a 501st row existed |
-| Connect timeout | 10 s | an unreachable database gives 503 `database_unavailable` |
+| Connect timeout | 5 s per connection attempt | psycopg makes one attempt per address the host resolves to, and each attempt has its own 5 s limit; an unreachable database gives 503 `database_unavailable` |
 | Safe values | always | PostgreSQL values (decimals, dates, UUIDs, …) are converted to JSON-safe values |
 | Safe errors | always | connection errors never include the URL, host or user; permission errors become 400 `query_not_allowed`; other SQL errors become 422 `query_failed` with a generic message |
 
