@@ -168,7 +168,7 @@ produce a misleading but read-only answer.
 | Situation | Result |
 |---|---|
 | Gemini unavailable (5xx or network) | retried twice (after 0.5 s and 1 s), then 503 `generation_unavailable` |
-| Gemini rate-limited | 429 `rate_limited`, not retried |
+| Gemini rate-limited | 429 `rate_limited`, never retried. If Gemini sends structured quota metadata, the message says whether it is a temporary limit or an exhausted quota; otherwise a generic message. A usable Gemini retry delay becomes a `Retry-After` header, whatever the type of limit |
 | Malformed or empty model output | 502 `generation_failed` |
 | SQL rejected by the validator | 400 `unsafe_sql`; nothing is executed |
 | Database timeout | 504 `query_timeout` |

@@ -139,5 +139,5 @@ the rate limiter as production-verified.
 | First request after a while is very slow | Render's free plan sleeps when idle; the first request wakes it (the frontend waits up to 60 s) |
 | Render fails at startup with a settings error | `CORS_ALLOWED_ORIGINS` is not a JSON list |
 | Every question returns "The database is unavailable" | `READONLY_DATABASE_URL` is wrong, or uses the IPv6-only direct host instead of the pooler |
-| Questions return 429 "Too many requests to the AI service" | The Gemini quota is exhausted; the rest of the app keeps working |
+| Questions return 429 with an AI-service limit message | Gemini's rate limit or quota was reached; the rest of the app keeps working |
 | Everyone shares one rate limit | `TRUST_CF_CONNECTING_IP` is not `true` on Render; see "Client IPs" above |

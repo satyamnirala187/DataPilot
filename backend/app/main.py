@@ -72,7 +72,8 @@ class QueryRequest(BaseModel):
 
 @app.exception_handler(QueryServiceError)
 def handle_query_error(request: Request, error: QueryServiceError) -> JSONResponse:
-    return error_response(STATUS_BY_ERROR_KIND.get(error.kind, 500), error.kind, str(error))
+    headers = {"Retry-After": str(error.retry_after)} if error.retry_after else None
+    return error_response(STATUS_BY_ERROR_KIND.get(error.kind, 500), error.kind, str(error), headers=headers)
 
 
 @app.exception_handler(RequestValidationError)

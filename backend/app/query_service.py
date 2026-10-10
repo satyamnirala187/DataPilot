@@ -62,9 +62,10 @@ class QueryServiceError(Exception):
     unsafe_sql, database_unavailable, query_timeout, query_not_allowed, query_failed.
     """
 
-    def __init__(self, kind: str, message: str):
+    def __init__(self, kind: str, message: str, *, retry_after: int | None = None):
         super().__init__(message)
         self.kind = kind
+        self.retry_after = retry_after  # seconds, sent to the client as a Retry-After header
 
 
 def run_business_query(
@@ -142,15 +143,25 @@ def _generate_with_retry(question: str, generate: Callable[[str], str], sleep: C
                 sleep(delay)
                 continue
             logger.warning("SQL generation failed (%s): %s", error.kind, error)
-            raise _generation_error(error.kind) from None
+            raise _generation_error(error) from None
     raise AssertionError("unreachable")
 
 
-def _generation_error(kind: str) -> QueryServiceError:
+# User-facing messages for Gemini 429s. All are HTTP 429 with code "rate_limited"; none is retried.
+RATE_LIMIT_MESSAGES = {
+    "temporary_rate_limit": "The AI service is receiving too many requests. Please try again shortly.",
+    "quota_exhausted": "The AI service usage limit has been reached. Please try again later.",
+    "rate_limited": "Too many requests to the AI service. Please try again later.",
+}
+
+
+def _generation_error(error: SQLGenerationError) -> QueryServiceError:
+    kind = error.kind
     if kind == "invalid_question":
         return QueryServiceError("invalid_question", "Please enter a question.")
     if kind == "rate_limited":
-        return QueryServiceError("rate_limited", "Too many requests to the AI service. Please try again shortly.")
+        message = RATE_LIMIT_MESSAGES.get(error.limit_type, RATE_LIMIT_MESSAGES["rate_limited"])
+        return QueryServiceError("rate_limited", message, retry_after=error.retry_after)
     if kind == "timeout":
         return QueryServiceError("generation_timeout", "The AI service took too long to respond. Please try again.")
     if kind in ("unavailable", "not_configured", "model_unavailable"):

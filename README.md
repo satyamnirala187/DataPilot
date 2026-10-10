@@ -10,7 +10,7 @@ AI insight. It is built around a fictional e-commerce store with synthetic data.
 **Live app:** [data-pilot-flax.vercel.app](https://data-pilot-flax.vercel.app)
 
 > DataPilot uses the Gemini API to write SQL. When Gemini's rate limits or availability are hit,
-> questions can be temporarily unavailable; the app shows a clear "try again shortly" message.
+> questions can be temporarily unavailable; the app shows a clear message asking you to try again.
 > This is a limit of the external provider, not of the application.
 
 ## What DataPilot Does

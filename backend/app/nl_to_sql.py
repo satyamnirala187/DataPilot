@@ -6,6 +6,9 @@ reaches the executor. The prompt asks for safe SQL, but prompting alone cannot g
 """
 
 import logging
+import math
+import re
+from typing import Any
 
 import httpx
 from google import genai
@@ -21,6 +24,13 @@ logger = logging.getLogger(__name__)
 SQL_GENERATION_TIMEOUT_MS = 20_000
 # What a timed-out request raises: httpx's timeout errors (the SDK's HTTP client) or Python's own.
 TIMEOUT_ERRORS = (httpx.TimeoutException, TimeoutError)
+
+# Gemini 429s can carry google.rpc error details. The SDK keeps the response body on
+# APIError.details but does not parse it, so the two detail types used here are read directly.
+RETRY_INFO_TYPE = "type.googleapis.com/google.rpc.RetryInfo"
+QUOTA_FAILURE_TYPE = "type.googleapis.com/google.rpc.QuotaFailure"
+MAX_RETRY_AFTER_SECONDS = 3600  # longer delays are capped; more than a day is treated as invalid
+_DURATION = re.compile(r"^(\d+(?:\.\d+)?)s$")  # google.protobuf.Duration as JSON, e.g. "37s", "1.5s"
 
 DATASET_REFERENCE_DATE = "2026-09-30"
 
@@ -125,9 +135,13 @@ class SQLGenerationError(Exception):
     The message never contains the API key, request details or raw SDK errors.
     """
 
-    def __init__(self, kind: str, message: str):
+    def __init__(self, kind: str, message: str, *, limit_type: str | None = None, retry_after: int | None = None):
         super().__init__(message)
         self.kind = kind
+        # Only for kind "rate_limited": limit_type is "temporary_rate_limit", "quota_exhausted" or
+        # "rate_limited" (not enough evidence to tell); retry_after is a usable delay in whole seconds.
+        self.limit_type = limit_type
+        self.retry_after = retry_after
 
 
 def build_user_prompt(question: str) -> str:
@@ -155,7 +169,7 @@ def generate_sql(question: str, *, client: genai.Client | None = None) -> str:
         )
     except errors.APIError as error:
         # Only the status code is used: SDK messages can echo request details.
-        raise _api_error(error.code) from None
+        raise _api_error(error) from None
     except TIMEOUT_ERRORS:
         raise SQLGenerationError(
             "timeout", f"Gemini did not respond within {SQL_GENERATION_TIMEOUT_MS // 1000} s."
@@ -179,9 +193,13 @@ def _default_client() -> genai.Client:
     )
 
 
-def _api_error(code: int | None) -> SQLGenerationError:
+def _api_error(error: errors.APIError) -> SQLGenerationError:
+    # Only the status code and structured details are used: SDK messages can echo request details.
+    code = error.code
     if code == 429:
-        return SQLGenerationError("rate_limited", "Gemini rate limit reached. Try again shortly.")
+        limit_type, retry_after = describe_rate_limit(error.details)
+        return SQLGenerationError("rate_limited", f"Gemini rate limit reached ({limit_type}).",
+                                  limit_type=limit_type, retry_after=retry_after)
     if code in (401, 403):
         return SQLGenerationError("not_configured", "Gemini rejected the API key.")
     if code == 404:
@@ -189,6 +207,55 @@ def _api_error(code: int | None) -> SQLGenerationError:
     if code is not None and code >= 500:
         return SQLGenerationError("unavailable", f"Gemini service error (HTTP {code}).")
     return SQLGenerationError("request_failed", f"Gemini rejected the request (HTTP {code}).")
+
+
+def describe_rate_limit(body: Any) -> tuple[str, int | None]:
+    """Classify a Gemini 429 from its structured details, and find a usable retry delay.
+
+    Classification uses only QuotaFailure quota IDs, never the English error message:
+      a quota ID for a daily limit ("PerDay")           -> quota_exhausted
+      only per-minute or per-second quota IDs            -> temporary_rate_limit
+      anything else (no details, unknown quota IDs)      -> rate_limited (generic)
+    The classification only chooses the message. A valid RetryInfo delay is returned for every type.
+    """
+    details = _error_details(body)
+    quota_ids = [
+        violation.get("quotaId")
+        for detail in details if detail.get("@type") == QUOTA_FAILURE_TYPE
+        for violation in (detail.get("violations") or []) if isinstance(violation, dict)
+    ]
+    quota_ids = [quota_id for quota_id in quota_ids if isinstance(quota_id, str)]
+    retry_after = next((_retry_after_seconds(d.get("retryDelay")) for d in details if d.get("@type") == RETRY_INFO_TYPE), None)
+    if any("PerDay" in quota_id for quota_id in quota_ids):
+        return "quota_exhausted", retry_after
+    if quota_ids and all("PerMinute" in quota_id or "PerSecond" in quota_id for quota_id in quota_ids):
+        return "temporary_rate_limit", retry_after
+    return "rate_limited", retry_after
+
+
+def _error_details(body: Any) -> list[dict]:
+    """The google.rpc detail objects from an error body ({"error": {...}} or the inner object)."""
+    if not isinstance(body, dict):
+        return []
+    inner = body.get("error", body)
+    details = inner.get("details") if isinstance(inner, dict) else None
+    return [detail for detail in details if isinstance(detail, dict)] if isinstance(details, list) else []
+
+
+def _retry_after_seconds(value: Any) -> int | None:
+    """A Duration ("37s", "1.5s" or {"seconds": 37, "nanos": 0}) as whole seconds, rounded up, or None."""
+    seconds = None
+    if isinstance(value, str):
+        match = _DURATION.match(value.strip())
+        seconds = float(match.group(1)) if match else None
+    elif isinstance(value, dict):
+        try:
+            seconds = float(value.get("seconds", 0)) + float(value.get("nanos", 0)) / 1e9
+        except (TypeError, ValueError):
+            seconds = None
+    if seconds is None or not math.isfinite(seconds) or seconds < 0 or seconds > 86_400:
+        return None
+    return min(MAX_RETRY_AFTER_SECONDS, max(1, math.ceil(seconds)))
 
 
 def _extract_sql(response: types.GenerateContentResponse) -> str:

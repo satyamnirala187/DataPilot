@@ -258,7 +258,7 @@ provider errors.
 
 | Failure | What happens |
 |---|---|
-| Gemini rate-limits SQL generation | HTTP 429 `rate_limited` |
+| Gemini rate-limits SQL generation | HTTP 429 `rate_limited`, never retried; a `Retry-After` header when Gemini sends a usable retry delay, and a more specific message when its quota metadata shows a temporary limit or an exhausted quota |
 | Gemini unavailable (5xx or network, after two retries) | HTTP 503 `generation_unavailable` |
 | Gemini returns an empty or malformed answer | HTTP 502 `generation_failed` |
 | Generated SQL fails validation | HTTP 400 `unsafe_sql`; the SQL is never executed |
