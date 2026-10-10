@@ -106,3 +106,25 @@ def test_the_app_imports_without_development_packages():
               "import app.main, app.query_service, app.db_executor, app.nl_to_sql, app.insight_service\n")
     done = subprocess.run([sys.executable, "-c", script], cwd=ROOT / "backend", capture_output=True, text=True, timeout=60)
     assert done.returncode == 0, done.stderr.splitlines()[-1:]
+
+
+def render_env_vars():
+    """{key: the lines of its entry} for every environment variable in render.yaml."""
+    entries, current = {}, None
+    for line in (ROOT / "render.yaml").read_text().splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- key:"):
+            current = stripped.split()[2]
+            entries[current] = []
+        elif current and stripped.startswith(("sync:", "value:")):
+            entries[current].append(stripped.split("#")[0].strip())
+    return entries
+
+
+def test_every_database_url_on_render_is_a_dashboard_secret_and_never_the_admin_one():
+    env = render_env_vars()
+    for key in ("READONLY_DATABASE_URL", "APP_DATABASE_URL"):
+        assert env[key] == ["sync: false"], key  # no value in Git: Render asks for it in its dashboard
+    assert "DATABASE_URL" not in env
+    text = (ROOT / "render.yaml").read_text()
+    assert "postgres://" not in text and "postgresql://" not in text

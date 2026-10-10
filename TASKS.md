@@ -246,6 +246,7 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] History and Saved Reports API
   - Five authenticated, account-scoped endpoints: `GET /history`, `GET /history/{id}`, `POST /saved-reports`, `GET /saved-reports`, `GET /saved-reports/{id}`. Reads use the stored snapshots only (no Gemini, no SQL rerun); a Saved Report saves an existing analysis by `analysis_id` with a title. No delete or edit endpoint in V1. Not production-live: `APP_DATABASE_URL` is still not set on Render.
 - [ ] Production deployment and verification
+  - Deployment prepared: `render.yaml` declares `APP_DATABASE_URL` (secret, no value in Git); `docs/deployment.md` has the rollout, verification plan and rollback. Still to do: the owner adds `APP_DATABASE_URL` on Render, then push, deploy and verify.
 
 ---
 

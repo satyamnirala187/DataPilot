@@ -20,6 +20,11 @@ services:
         value: "true"
       - key: READONLY_DATABASE_URL  # the read-only role via the Supabase session pooler
         sync: false
+      # History and Saved Reports (docs/deployment.md, "History and Saved Reports"): the datapilot_app
+      # role, which can only read and add rows in schema datapilot. Without it the app still answers
+      # questions, but stores no History and the History endpoints return 503. Never the admin URL.
+      - key: APP_DATABASE_URL
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: CORS_ALLOWED_ORIGINS  # JSON list: the Vercel URL plus localhost origins

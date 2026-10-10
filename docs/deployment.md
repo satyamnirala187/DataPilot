@@ -11,8 +11,9 @@ Browser ──> Vercel (static React app)
                                 └──> Gemini API
 ```
 
-The browser only ever talks to the Render API. Secrets (Gemini key, database URL) live only in
-Render's environment; the frontend holds just the public API URL.
+The browser only ever talks to the Render API. Secrets (Gemini key, database URLs) live only in
+Render's environment; the frontend holds just the public API URL. The API reaches Supabase as two
+roles: `datapilot_readonly` for questions and, for History and Saved Reports, `datapilot_app`.
 
 ## Prerequisites
 
@@ -22,6 +23,8 @@ Render's environment; the frontend holds just the public API URL.
 - The read-only connection string from Supabase, using the **session pooler** (IPv4). Render cannot
   reach Supabase's IPv6-only direct host (`db.<ref>.supabase.co`).
 - A Gemini API key.
+- For History and Saved Reports: schema `datapilot` and the role `datapilot_app`, created once with
+  `database/create_app_role.py`, which also wrote `APP_DATABASE_URL` to the local `.env`.
 
 ## 1. Backend on Render
 
@@ -44,6 +47,7 @@ Environment variables (names only; enter values in the Render dashboard):
 | Name | Required | Value |
 |---|---|---|
 | `READONLY_DATABASE_URL` | yes | read-only role via the session pooler (a secret). The backend requires TLS whatever the URL says, so `?sslmode=require` is optional |
+| `APP_DATABASE_URL` | for History | the `datapilot_app` role via the session pooler (a secret), from the local `.env`. Without it questions still work, but no History is stored and the History endpoints return 503; see [History and Saved Reports](#history-and-saved-reports) |
 | `GEMINI_API_KEY` | yes | Gemini API key |
 | `CORS_ALLOWED_ORIGINS` | yes | JSON list, see [CORS](#cors) |
 | `DEMO_USERNAME` | yes | the shared demo login name (a secret); see [Private demo access](#private-demo-access) |
@@ -57,6 +61,7 @@ Environment variables (names only; enter values in the Render dashboard):
 | `ENABLE_API_DOCS` | no | leave unset in production: `/docs`, `/redoc` and `/openapi.json` then return 404 |
 
 Never set the admin `DATABASE_URL` on Render: it is only for the setup scripts in `database/`.
+`APP_DATABASE_URL` is a different, much narrower connection, not a replacement for it.
 
 `PYTHON_VERSION` takes precedence over any other Python version setting on Render, so the build
 uses exactly Python 3.13.16; the build log shows the version it installed. The Blueprint sets it
@@ -189,6 +194,109 @@ off. Either fix forward, or revert the backend and frontend login commits **toge
 the previous version (with its rate limit and daily cap) returns as a whole. If login says
 "Demo access is temporarily unavailable", a `DEMO_*` secret is missing on Render.
 
+## History and Saved Reports
+
+Phase 19 stores every successful answer as History and lets users save one as a report
+(`docs/architecture.md`, "Application data"). In production this needs one more secret:
+
+**`APP_DATABASE_URL`** is the connection for the role `datapilot_app`. That role can only read and
+add rows in `datapilot.analyses` and `datapilot.saved_reports`: no access to the business tables, no
+updates or deletes. It is never used for generated SQL, which keeps running as
+`datapilot_readonly`. `database/create_app_role.py` wrote it to the local `.env`, with the same
+session-pooler host as `READONLY_DATABASE_URL` and `sslmode=require`.
+
+It is **not** the admin `DATABASE_URL`. Never put the admin URL on Render, even to make History work.
+
+### Setting `APP_DATABASE_URL`
+
+1. Open the local `.env` in an editor and copy the value of `APP_DATABASE_URL` (everything after
+   the first `=`). Do not print it in a terminal, and never paste it into Git, docs, screenshots or
+   chat (including AI assistants).
+2. In Render, open the service → **Environment** → add `APP_DATABASE_URL` as a secret and paste the
+   value. The Blueprint already declares the key with `sync: false`, so it has no value in Git.
+3. Check it appears in the Environment list, without revealing it.
+
+Re-running `create_app_role.py` rotates the role's password and rewrites the local value; copy the
+new value to Render straight away, or History stops being stored (and the endpoints return 503)
+until you do.
+
+### Rolling out
+
+1. **Set `APP_DATABASE_URL` on Render first.** Saving restarts the version already running, which
+   ignores settings it does not know, so this is harmless.
+2. **Then push** the Phase 19 commits. Render deploys the new backend, which picks up
+   `APP_DATABASE_URL` at startup.
+3. **The frontend needs no change**: no code and no environment variable. Vercel may rebuild the
+   same frontend on push; that is harmless. The current frontend ignores the new `analysis_id` field,
+   and there is no History or Saved Reports screen yet.
+4. History starts with the **first successful question answered by the new backend**. Earlier
+   answers were never stored and are not created retroactively.
+
+### Production verification plan
+
+Not run yet; to be done after the rollout. Spend Gemini quota on one question only.
+
+**A. Without Gemini or credentials** (`curl` from any machine):
+
+```bash
+API=https://<service>.onrender.com
+curl -s "$API/health"                                            # 200 {"status":"ok",...}
+curl -s -o /dev/null -w '%{http_code}\n' "$API/history"          # 401
+curl -s -o /dev/null -w '%{http_code}\n' "$API/saved-reports"    # 401
+curl -s -o /dev/null -w '%{http_code}\n' "$API/docs"             # 404
+curl -s -o /dev/null -w '%{http_code}\n' "$API/openapi.json"     # 404
+```
+
+The two 401s come with `{"error":{"code":"unauthorized",...}}`: the endpoints exist and refuse
+requests without a session before touching the database.
+
+**B. One real question** (uses Gemini quota once):
+
+1. Log in on the production Vercel site as usual.
+2. Ask exactly **one** simple question, for example "What is the total revenue from delivered
+   orders?". Do not run the benchmark or any other Gemini tests.
+3. The answer appears as before.
+4. In the Network tab, the `/query` response has a non-null `analysis_id`.
+5. Render's log line for it (search for its `X-Request-ID`) shows `outcome=success` and
+   `history_status=saved`. `history_status=disabled` means `APP_DATABASE_URL` is missing;
+   `failed` (with `history_error`) means it is set but the database refused it.
+
+**C. History and Saved Reports, with no further Gemini calls**, from the browser console on the
+Vercel site while logged in (the token never leaves the browser and is never printed):
+
+```js
+const api = 'https://<service>.onrender.com'
+const auth = {Authorization: 'Bearer ' + sessionStorage.getItem('datapilot_demo_token')}
+const history = await (await fetch(`${api}/history`, {headers: auth})).json()
+console.log(history.items.length, history.items[0]?.question)                 // 1, the question asked
+const id = history.items[0].id
+console.log((await (await fetch(`${api}/history/${id}`, {headers: auth})).json()).rows.length)
+```
+
+The detail shows the same rows, SQL, chart and insight as the answer in step B. Optionally, save it:
+
+```js
+const save = () => fetch(`${api}/saved-reports`, {method: 'POST', headers: {...auth, 'Content-Type': 'application/json'},
+                                                    body: JSON.stringify({analysis_id: id, title: 'Total revenue'})})
+console.log((await save()).status, (await save()).status)                      // 201 409
+const reports = await (await fetch(`${api}/saved-reports`, {headers: auth})).json()
+console.log(reports.items.length, (await fetch(`${api}/saved-reports/${reports.items[0].id}`, {headers: auth})).status)  // 1 200
+```
+
+A saved report is permanent: V1 has no delete, so choose a title worth keeping, or skip the save.
+None of these requests calls Gemini, runs SQL on the business tables or uses the daily cap.
+
+### Rolling back
+
+- **Turn History off:** remove `APP_DATABASE_URL` on Render (Render restarts the service). Questions
+  keep working exactly as before and return `analysis_id: null`; the log shows
+  `history_status=disabled`. The History and Saved Reports endpoints return 503
+  `history_unavailable`. Answering business questions (Gemini, the validator, the read-only role)
+  does not depend on History in any way.
+- Stored analyses and saved reports stay in Supabase and are served again once the variable is back.
+- To go back to the previous code entirely, revert the Phase 19 commits and push; the database
+  schema and role can stay, unused.
+
 ## Security notes
 
 Everything from Phase 11 applies unchanged in production (see `docs/security-review.md`): safe
@@ -263,6 +371,11 @@ the browser's developer tools (Network tab); search the logs for that ID to find
   `unavailable` or `invalid_request`. The username and password are never logged.
 - `insight_status=skipped_budget` means SQL generation and the database used most of the 45 s
   budget, so the optional insight was skipped.
+- `history_status=saved` means the answer was stored as History; `disabled` means
+  `APP_DATABASE_URL` is not set; `failed` (a WARNING line, with `history_error`) means storing failed
+  while the user still got the answer.
+- `event=history_unavailable` lines are History or Saved Reports requests that got 503, with the
+  endpoint and a fixed `cause` (`disabled`, `unavailable`, `timeout`, ...).
 - Unexpected errors log an ERROR line with the exception type, its request ID and a code-location
   traceback (no exception message).
 
@@ -284,3 +397,4 @@ line with the TCP peer, which on Render is the internal proxy address, not the v
 | Everyone is sent back to the login page | `DEMO_SESSION_SECRET` was changed, or sessions reached their 2-hour expiry |
 | Everyone shares one rate limit | `TRUST_CF_CONNECTING_IP` is not `true` on Render; see "Client IPs" above |
 | Questions return 429 "daily AI request limit" | DataPilot's global daily cap was reached (`cause=global_daily_limit`); it reopens at midnight Pacific time or after a restart |
+| Answers have `analysis_id: null`; History endpoints return 503 | `APP_DATABASE_URL` is missing on Render (`history_status=disabled`, `cause=disabled`), or wrong or out of date after `create_app_role.py` was re-run (`history_error=unavailable`) |
