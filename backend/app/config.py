@@ -53,7 +53,7 @@ class Settings(BaseSettings):
 
     # Gemini, used to turn questions into SQL. The key is a SecretStr so it never appears in logs.
     gemini_api_key: SecretStr | None = None
-    gemini_model: str = "gemini-3.7-flash"
+    gemini_model: str = "gemini-3.6-flash"
 
 
 settings = Settings()

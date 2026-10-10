@@ -49,7 +49,7 @@ Environment variables (names only; enter values in the Render dashboard):
 | `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS` | no | default 5 questions per 60 s per client |
 | `MAX_RESULT_BYTES` | no | default 1,000,000; larger answers are refused with 422 `result_too_large` |
 | `GLOBAL_DAILY_QUERY_LIMIT` | no | default 5 questions per Pacific day from all clients; set to `5` on Render. Size it to the Gemini quota: one question can use up to 4 Gemini requests |
-| `GEMINI_MODEL` | no | default `gemini-3.7-flash`; set explicitly on Render |
+| `GEMINI_MODEL` | no | default `gemini-3.6-flash`; set explicitly on Render |
 
 Never set the admin `DATABASE_URL` on Render: it is only for the setup scripts in `database/`.
 
@@ -121,10 +121,13 @@ are safety brakes, not a quota system; Google's quota is the hard limit.
 Production status, as checked by the project owner in Google AI Studio and the Render dashboard:
 
 - the production key is an Auth key, and the project is on the Free tier;
-- Gemini 3.7 Flash limits: 5 requests per minute, 250K tokens per minute, 20 requests per day;
-- Gemini 3.8 Flash allowed only 2 requests per day on this tier, too few for DataPilot, so Render
-  sets `GEMINI_MODEL=gemini-3.7-flash`;
-- Render sets `GLOBAL_DAILY_QUERY_LIMIT=5`.
+- Render sets `GEMINI_MODEL=gemini-3.6-flash`, the backend's default too;
+- Gemini 3.6 Flash limits: 5 requests per minute, 250K tokens per minute, 20 requests per day;
+- Render sets `GLOBAL_DAILY_QUERY_LIMIT=5`: 5 questions × up to 4 Gemini requests = 20 a day.
+
+Model history: Gemini 3.8 Flash allowed only 2 requests per day on this tier, too few for
+DataPilot. Gemini 3.7 Flash was used next, until Google deprecated it (its requests are redirected
+to 3.8 Flash); the project owner then switched Render to 3.6 Flash.
 
 Keep the key limited to the Gemini API where Google's console allows it. If the project is ever
 billed, keep its quotas low and add a budget with alerts; budget alerts only notify, they do not

@@ -22,7 +22,7 @@ from app.rate_limiter import DailyLimit, RateLimiter, seconds_until_next_quota_d
 
 NOON = datetime(2026, 10, 10, 19, 0, tzinfo=UTC)  # 12:00 PDT on 10 October
 NEXT_PACIFIC_MIDNIGHT = datetime(2026, 10, 11, 7, 0, tzinfo=UTC)  # 00:00 PDT on 11 October
-FREE_TIER_REQUESTS_PER_DAY = 20  # Gemini 3.7 Flash free tier, as observed by the project owner
+FREE_TIER_REQUESTS_PER_DAY = 20  # Gemini 3.6 Flash free tier, as observed by the project owner
 OK = QueryResponse(question="q", sql="SELECT 1 LIMIT 501", columns=["n"], rows=[[1]], row_count=1,
                    truncated=False, visualization={"type": "kpi", "y_key": "n"}, insight=None)
 DAILY_ERROR = {"error": {"code": "daily_limit_reached",
@@ -160,7 +160,7 @@ def test_default_cap_fits_the_free_tier_even_in_the_worst_case(monkeypatch):
     worst_case_requests_per_question = (len(GEMINI_RETRY_DELAYS) + 1) + 1
     assert worst_case_requests_per_question == 4
     assert defaults.global_daily_query_limit * worst_case_requests_per_question <= FREE_TIER_REQUESTS_PER_DAY
-    assert defaults.gemini_model == "gemini-3.7-flash"
+    assert defaults.gemini_model == "gemini-3.6-flash"
 
 
 # --- Through the API ----------------------------------------------------------------------------
