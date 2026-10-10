@@ -6,8 +6,13 @@ from app.sql_validator import MAX_LIMIT, UnsafeSQLError, validate_sql
 
 
 def limit_of(sql: str) -> str:
-    """The LIMIT clause at the end of validated SQL, e.g. 'LIMIT 500'."""
+    """The LIMIT clause at the end of validated SQL, e.g. 'LIMIT 501'."""
     return sql[sql.rindex("LIMIT"):]
+
+
+# When the validator adds or caps a LIMIT it asks for one row more than MAX_LIMIT, so the executor
+# can tell whether rows were left out (see test_truncation.py).
+ADDED_LIMIT = f"LIMIT {MAX_LIMIT + 1}"
 
 
 # --- Allowed queries -------------------------------------------------------------------
@@ -87,7 +92,7 @@ def test_returned_sql_is_itself_valid():
 
 
 def test_missing_limit_is_added():
-    assert limit_of(validate_sql("SELECT * FROM orders")) == f"LIMIT {MAX_LIMIT}"
+    assert limit_of(validate_sql("SELECT * FROM orders")) == ADDED_LIMIT
 
 
 def test_valid_limit_is_kept():
@@ -98,32 +103,38 @@ def test_limit_equal_to_maximum_is_kept():
     assert limit_of(validate_sql(f"SELECT * FROM orders LIMIT {MAX_LIMIT}")) == f"LIMIT {MAX_LIMIT}"
 
 
+def test_limit_one_past_the_maximum_is_kept_and_anything_larger_is_capped():
+    assert limit_of(validate_sql(f"SELECT * FROM orders LIMIT {MAX_LIMIT + 1}")) == ADDED_LIMIT
+    assert limit_of(validate_sql(f"SELECT * FROM orders LIMIT {MAX_LIMIT + 2}")) == ADDED_LIMIT
+
+
 def test_oversized_limit_is_capped():
-    assert limit_of(validate_sql("SELECT * FROM orders LIMIT 1000000")) == f"LIMIT {MAX_LIMIT}"
+    assert limit_of(validate_sql("SELECT * FROM orders LIMIT 1000000")) == ADDED_LIMIT
 
 
 def test_limit_all_is_capped():
-    assert limit_of(validate_sql("SELECT * FROM orders LIMIT ALL")) == f"LIMIT {MAX_LIMIT}"
+    assert limit_of(validate_sql("SELECT * FROM orders LIMIT ALL")) == ADDED_LIMIT
 
 
 def test_custom_maximum_is_respected():
-    assert limit_of(validate_sql("SELECT * FROM orders LIMIT 80", max_limit=50)) == "LIMIT 50"
-    assert limit_of(validate_sql("SELECT * FROM orders", max_limit=50)) == "LIMIT 50"
+    assert limit_of(validate_sql("SELECT * FROM orders LIMIT 80", max_limit=50)) == "LIMIT 51"
+    assert limit_of(validate_sql("SELECT * FROM orders", max_limit=50)) == "LIMIT 51"
+    assert limit_of(validate_sql("SELECT * FROM orders LIMIT 50", max_limit=50)) == "LIMIT 50"
 
 
 def test_offset_is_kept_when_limit_is_added():
     result = validate_sql("SELECT * FROM orders ORDER BY order_id OFFSET 20")
-    assert "OFFSET 20" in result and f"LIMIT {MAX_LIMIT}" in result
+    assert "OFFSET 20" in result and ADDED_LIMIT in result
 
 
 def test_limit_applies_to_whole_union():
     result = validate_sql("SELECT city FROM customers UNION SELECT name FROM categories")
-    assert result.endswith(f"LIMIT {MAX_LIMIT}")
+    assert result.endswith(ADDED_LIMIT)
 
 
 def test_inner_limit_is_left_alone_and_outer_limit_added():
     result = validate_sql("SELECT * FROM (SELECT * FROM orders LIMIT 5000) AS recent")
-    assert "LIMIT 5000" in result and result.endswith(f"LIMIT {MAX_LIMIT}")
+    assert "LIMIT 5000" in result and result.endswith(ADDED_LIMIT)
 
 
 def test_comments_are_removed():
@@ -340,12 +351,12 @@ def test_every_row_locking_clause_is_blocked(sql):
 
 
 def test_limit_all_is_replaced_with_custom_maximum():
-    assert limit_of(validate_sql("SELECT * FROM orders LIMIT ALL", max_limit=25)) == "LIMIT 25"
+    assert limit_of(validate_sql("SELECT * FROM orders LIMIT ALL", max_limit=25)) == "LIMIT 26"
 
 
 def test_limit_all_on_a_union_is_replaced():
     result = validate_sql("SELECT city FROM customers UNION SELECT name FROM categories LIMIT ALL")
-    assert result.endswith(f"LIMIT {MAX_LIMIT}") and "ALL" not in result
+    assert result.endswith(ADDED_LIMIT) and "ALL" not in result
 
 
 @pytest.mark.parametrize("sql", [
@@ -401,7 +412,7 @@ def test_nested_subqueries_are_allowed():
                 SELECT order_id FROM order_items
                 WHERE product_id IN (SELECT product_id FROM products WHERE price > 10000)))
     """
-    assert validate_sql(sql).endswith(f"LIMIT {MAX_LIMIT}")
+    assert validate_sql(sql).endswith(ADDED_LIMIT)
 
 
 def test_forbidden_table_deep_inside_nested_subqueries_is_blocked():
@@ -416,7 +427,7 @@ def test_forbidden_table_deep_inside_nested_subqueries_is_blocked():
 @pytest.mark.parametrize("operator", ["UNION", "UNION ALL", "INTERSECT", "EXCEPT"])
 def test_set_operations_are_allowed(operator):
     result = validate_sql(f"SELECT city FROM customers {operator} SELECT name FROM categories")
-    assert operator in result and result.endswith(f"LIMIT {MAX_LIMIT}")
+    assert operator in result and result.endswith(ADDED_LIMIT)
 
 
 @pytest.mark.parametrize("sql, reason", [
@@ -435,11 +446,11 @@ def test_unsafe_second_branch_of_a_union_is_blocked(sql, reason):
 ])
 def test_comments_before_sql_are_allowed_and_removed(sql):
     result = validate_sql(sql)
-    assert result == f"SELECT * FROM orders LIMIT {MAX_LIMIT}"
+    assert result == f"SELECT * FROM orders {ADDED_LIMIT}"
 
 
 def test_semicolon_and_trailing_comment_after_a_valid_query():
-    assert validate_sql("SELECT * FROM orders; -- done") == f"SELECT * FROM orders LIMIT {MAX_LIMIT}"
+    assert validate_sql("SELECT * FROM orders; -- done") == f"SELECT * FROM orders {ADDED_LIMIT}"
 
 
 @pytest.mark.parametrize("sql", [

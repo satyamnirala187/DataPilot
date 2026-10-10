@@ -14,7 +14,7 @@ is set during deployment (Phase 13) and must be re-checked there.
 | 2 | Read-only only, including inside CTEs | Met | `sql_validator._check_read_only` (`FORBIDDEN_NODES`) | validator tests; pipeline test with `WITH gone AS (DELETE ...)`, `FOR UPDATE`, `SELECT ... INTO` |
 | 3 | Table allowlist, no system schemas | Met | `sql_validator._check_tables` (`ALLOWED_TABLES`, `ALLOWED_SCHEMAS`) | validator tests; pipeline tests for `pg_catalog` and `information_schema` |
 | 4 | Dangerous function blocklist | Met | `sql_validator._check_functions` (blocklist, `pg_`/`lo_`/`dblink` prefixes, unknown functions rejected) | validator tests; pipeline tests for `pg_sleep`, `pg_read_file` |
-| 5 | Row limit enforced | Met | `sql_validator._enforce_limit` (adds or caps `LIMIT 500`); executor also fetches at most `max_result_rows` | `test_the_validator_adjusted_sql_is_what_gets_executed`; executor row-cap tests |
+| 5 | Row limit enforced | Met | `sql_validator._enforce_limit` (adds or caps `LIMIT 501`: 500 rows plus a truncation probe); executor returns at most `max_result_rows` (500) | `test_the_validator_adjusted_sql_is_what_gets_executed`; executor row-cap tests |
 | 6 | Fail closed | Met | parse errors, unknown functions and unknown statements are rejected | validator tests |
 
 The pipeline (`query_service.run_business_query`) passes only the validator's output to the

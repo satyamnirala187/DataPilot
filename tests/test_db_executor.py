@@ -90,6 +90,23 @@ def test_rows_are_capped_and_flagged_as_truncated():
 
 
 @needs_database
+def test_validated_query_over_the_cap_is_flagged_as_truncated():
+    # The real database, the real validator: order_items has far more than 500 rows.
+    from app.sql_validator import MAX_LIMIT, validate_sql
+    result = execute_query(validate_sql("SELECT order_item_id FROM order_items"))
+    assert len(result.rows) == MAX_LIMIT
+    assert result.truncated is True
+
+
+@needs_database
+def test_validated_query_with_a_small_limit_is_not_truncated():
+    from app.sql_validator import validate_sql
+    result = execute_query(validate_sql("SELECT order_item_id FROM order_items LIMIT 10"))
+    assert len(result.rows) == 10
+    assert result.truncated is False
+
+
+@needs_database
 def test_result_exactly_at_the_cap_is_not_truncated():
     result = execute_query("SELECT category_id FROM categories", max_rows=10)
     assert len(result.rows) == 10

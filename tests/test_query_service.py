@@ -99,7 +99,7 @@ def test_unanswerable_message_query_flows_through_normally():
         "Delete every customer", generate=lambda q: message_sql, validate=validate_sql,
         execute=lambda sql: executed.append(sql) or QueryResult(["message"], [["This question cannot be answered..."]], False),
     )
-    assert executed == [message_sql + " LIMIT 500"] and response.columns == ["message"]
+    assert executed == [message_sql + " LIMIT 501"] and response.columns == ["message"]
 
 
 # --- Security: only validator-approved SQL is executed ----------------------------------
@@ -143,7 +143,7 @@ def test_executor_receives_the_validator_modified_sql():
     run_business_query("all orders", generate=lambda q: "SELECT order_id FROM orders LIMIT 100000",
                        validate=validate_sql,
                        execute=lambda sql: executed.append(sql) or QueryResult(["order_id"], [], False))
-    assert executed == ["SELECT order_id FROM orders LIMIT 500"]
+    assert executed == ["SELECT order_id FROM orders LIMIT 501"]  # capped: 500 rows + 1 truncation probe
 
 
 # --- Errors ---------------------------------------------------------------------------

@@ -332,8 +332,8 @@ def test_compromised_llm_output_is_blocked_before_the_database(malicious_sql):
 
 
 @pytest.mark.parametrize("generated, expected_limit", [
-    ("SELECT name FROM categories", MAX_LIMIT),
-    ("SELECT name FROM categories LIMIT 100000", MAX_LIMIT),
+    ("SELECT name FROM categories", MAX_LIMIT + 1),  # added: 500 rows + 1 truncation probe
+    ("SELECT name FROM categories LIMIT 100000", MAX_LIMIT + 1),  # capped the same way
     ("SELECT name FROM categories LIMIT 5", 5),
 ])
 def test_the_validator_adjusted_sql_is_what_gets_executed(generated, expected_limit):
@@ -363,7 +363,7 @@ def test_api_returns_the_result_when_only_the_insight_fails(client, monkeypatch)
     assert response.status_code == 200
     body = response.json()
     assert body["insight"] is None and body["rows"] == [[21304631.99]]
-    assert body["visualization"]["type"] == "kpi" and body["sql"].endswith("LIMIT 500")
+    assert body["visualization"]["type"] == "kpi" and body["sql"].endswith("LIMIT 501")
 
 
 # --- Database defence in depth (no live database) -------------------------------------------

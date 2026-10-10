@@ -8,6 +8,9 @@ database, network or LLM access, so it can be tested on its own.
 import sqlglot
 from sqlglot import exp
 
+# The most rows DataPilot returns for one question. When the validator adds or caps a LIMIT it
+# asks for one row more (LIMIT 501): the executor returns at most MAX_LIMIT rows and uses the extra
+# row only to tell whether rows were left out, which it reports as `truncated`.
 MAX_LIMIT = 500
 
 # Rule 3: the only tables a query may read. Unqualified or public.<table> only.
@@ -49,7 +52,10 @@ class UnsafeSQLError(ValueError):
 
 
 def validate_sql(sql: str, max_limit: int = MAX_LIMIT) -> str:
-    """Return a safe, normalised version of sql, or raise UnsafeSQLError."""
+    """Return a safe, normalised version of sql, or raise UnsafeSQLError.
+
+    max_limit is the most rows that will be returned; the SQL may fetch max_limit + 1 (see MAX_LIMIT).
+    """
     statement = _parse_single_statement(sql)  # rules 6 and 1
     _check_read_only(statement)  # rule 2
     _check_tables(statement)  # rule 3
@@ -151,14 +157,15 @@ def _check_functions(statement: exp.Expression) -> None:
 
 
 def _enforce_limit(statement: exp.Expression, max_limit: int) -> None:
+    probe_limit = max_limit + 1  # one extra row so the executor can detect truncation
     limit = statement.args.get("limit")
     if limit is None:  # no LIMIT (LIMIT ALL also parses as none)
-        statement.set("limit", exp.Limit(expression=exp.Literal.number(max_limit)))
+        statement.set("limit", exp.Limit(expression=exp.Literal.number(probe_limit)))
         return
     if not isinstance(limit, exp.Limit):
         raise UnsafeSQLError("Use LIMIT to restrict rows (FETCH is not supported).")
     value = limit.expression
     if not (isinstance(value, exp.Literal) and value.is_int):
         raise UnsafeSQLError("LIMIT must be a whole number.")
-    if int(value.name) > max_limit:
-        statement.set("limit", exp.Limit(expression=exp.Literal.number(max_limit)))
+    if int(value.name) > probe_limit:
+        statement.set("limit", exp.Limit(expression=exp.Literal.number(probe_limit)))
