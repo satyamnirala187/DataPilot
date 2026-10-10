@@ -189,7 +189,7 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [ ] Add screenshots or a demo to the README
 - [x] Create the architecture diagram in `docs/`
 - [x] Document the safety model (validator rules + read-only database layer) in `docs/`
-- [ ] Add the benchmark results to `docs/`
+- [x] Add the benchmark results to `docs/`
 - [ ] Record a short demo video or GIF
 - [ ] Write resume bullet points and a short project summary
 - [ ] Practise explaining the architecture, safety model and design decisions without notes
