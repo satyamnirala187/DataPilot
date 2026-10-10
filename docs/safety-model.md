@@ -103,7 +103,7 @@ What the validator does **not** do: it does not check column names or whether th
 semantically correct. An unknown column passes validation and then fails safely at the database
 (422 `query_failed`).
 
-The validator has 279 unit tests covering allowed and blocked cases, plus pipeline tests that feed
+The validator has 298 unit tests covering allowed and blocked cases, plus pipeline tests that feed
 it the SQL a fully manipulated model might return.
 
 ## 5. Database-level protection
@@ -128,12 +128,13 @@ privileges so recreated tables stay closed. The Data API itself is disabled in t
 dashboard (confirmed by the project owner), and the tables stay protected even if it is enabled by
 mistake. A database test checks the grants (`tests/test_database_privileges.py`).
 
-Two connection strings exist, with different jobs:
+Three connection strings exist, with different jobs:
 
 | Variable | Role | Used by |
 |---|---|---|
 | `DATABASE_URL` | admin | the setup scripts in `database/` only (schema, seed data, creating the read-only role). Not an application setting and not configured on Render |
 | `READONLY_DATABASE_URL` | `datapilot_readonly` | the running API, for every user query |
+| `APP_DATABASE_URL` | `datapilot_app` | planned: storing History and Saved Reports only (not used by any code yet). Never used for generated SQL |
 
 This layer protects the data **even if the validator had a bug**: a write is refused by the
 database itself. This was verified against the real database: `DELETE` and `UPDATE` attempts were
@@ -141,6 +142,15 @@ refused through the executor, refused by the role's read-only default, and still
 `InsufficientPrivilege` after switching a transaction to read-write, so the grants alone block
 writes. Integration tests also check that writes, schema changes and sequence use are refused and
 that tables outside the six cannot be read.
+
+**DataPilot's own tables are out of reach too (History and Saved Reports, in progress).** They live
+in a separate schema, `datapilot` (`database/app_schema.sql`), written only by the role
+`datapilot_app` (`database/app_role.sql`: `SELECT` and `INSERT` on its two tables, nothing on the
+business tables). Three separate layers keep generated SQL away from them: the validator allows
+only the six tables in `public`; `datapilot_readonly` has no access to schema `datapilot` at all;
+and the prompt never mentions them. `PUBLIC`, `anon` and `authenticated` have no access either.
+Tests cover each layer (`tests/test_sql_validator.py`, `tests/test_app_schema.py`, and live catalog
+checks against the hosted database in `tests/test_database_privileges.py`).
 
 ## 6. Execution limits
 

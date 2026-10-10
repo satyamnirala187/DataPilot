@@ -237,6 +237,14 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Production verification of the login gate
   - Owner verified in the browser: login page shown, correct credentials open DataPilot, reload keeps the session, logout returns to login. Gemini-free API checks: `/health` 200, `POST /query` without a token 401 `unauthorized`, `/docs` and `/openapi.json` 404.
 
+## Phase 19 — History & Saved Reports
+
+- [x] Database persistence foundation
+  - Schema `datapilot` (tables `analyses`, `saved_reports`) and writer role `datapilot_app` applied to Supabase with `create_app_role.py`; `APP_DATABASE_URL` in local `.env` only. Catalog privileges verified by the live tests: `datapilot_app` has SELECT + INSERT only and nothing on the business tables; `datapilot_readonly`, PUBLIC, anon, authenticated and service_role have no access to the schema. A transactional writer test (insert, read back, UPDATE/DELETE/TRUNCATE and business-table access refused, over TLS) passed and was rolled back, leaving no rows.
+- [ ] Automatic query history recording
+- [ ] History and Saved Reports API
+- [ ] Production deployment and verification
+
 ---
 
 ## Nice to have (only after all phases above are complete)

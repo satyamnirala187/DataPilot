@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     # defined here: it is only for the setup scripts in database/. SecretStr keeps the value
     # out of logs and error messages.
     readonly_database_url: SecretStr | None = None
+    # Role datapilot_app, for History and Saved Reports only (schema datapilot; created by
+    # database/create_app_role.py). It can read and add rows there and cannot see the business
+    # tables. Never used to run generated SQL. Not used by any code yet.
+    app_database_url: SecretStr | None = None
     query_timeout_ms: int = 5000
     max_result_rows: int = 500
     # Most bytes of JSON (columns + rows) one answer may return; larger results are refused, not

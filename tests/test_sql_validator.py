@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.sql_validator import MAX_LIMIT, UnsafeSQLError, validate_sql
+from app.sql_validator import ALLOWED_SCHEMAS, ALLOWED_TABLES, MAX_LIMIT, UnsafeSQLError, validate_sql
 
 
 def limit_of(sql: str) -> str:
@@ -719,6 +719,52 @@ def test_quoted_and_public_qualified_names_are_allowed(sql):
 ])
 def test_case_sensitive_quoted_names_follow_postgres_rules(sql, reason):
     assert_blocked(sql, reason)
+
+
+# --- Application tables (History and Saved Reports) -------------------------------------
+# datapilot.analyses and datapilot.saved_reports (database/app_schema.sql) hold DataPilot's own
+# data. Generated SQL must never reach them, in any spelling: the allowlist stays exactly the six
+# business tables, in public or unqualified. (The database refuses too: datapilot_readonly has no
+# access to schema datapilot; see tests/test_database_privileges.py.)
+
+def test_the_allowlist_is_exactly_the_six_business_tables_in_public():
+    assert ALLOWED_TABLES == frozenset({"customers", "categories", "products", "orders", "order_items", "payments"})
+    assert ALLOWED_SCHEMAS == frozenset({"", "public"})
+
+
+@pytest.mark.parametrize("sql, reason", [
+    ("SELECT * FROM analyses", "Table 'analyses' is not allowed"),
+    ("SELECT * FROM saved_reports", "Table 'saved_reports' is not allowed"),
+    ("SELECT * FROM datapilot.analyses", "Schema 'datapilot' is not allowed"),
+    ("SELECT * FROM datapilot.saved_reports", "Schema 'datapilot' is not allowed"),
+    ('SELECT * FROM "analyses"', "Table 'analyses' is not allowed"),
+    ('SELECT * FROM "saved_reports"', "Table 'saved_reports' is not allowed"),
+    ('SELECT * FROM "datapilot"."analyses"', "Schema 'datapilot' is not allowed"),
+    ('SELECT * FROM "datapilot"."saved_reports"', "Schema 'datapilot' is not allowed"),
+    ("SELECT * FROM DATAPILOT.ANALYSES", "Schema 'DATAPILOT' is not allowed"),
+    ("SELECT * FROM public.analyses", "Table 'analyses' is not allowed"),
+    ("SELECT * FROM postgres.datapilot.saved_reports", "Schema 'postgres' is not allowed"),
+    ("SELECT a.question FROM orders o JOIN datapilot.analyses a ON a.row_count = o.order_id",
+     "Schema 'datapilot' is not allowed"),
+    ("SELECT * FROM orders WHERE EXISTS (SELECT 1 FROM datapilot.saved_reports)", "Schema 'datapilot' is not allowed"),
+    ("WITH h AS (SELECT * FROM datapilot.analyses) SELECT * FROM h", "Schema 'datapilot' is not allowed"),
+    ("SELECT city FROM customers UNION SELECT question FROM analyses", "Table 'analyses' is not allowed"),
+    ("SELECT sr.title FROM saved_reports sr JOIN analyses a ON a.id = sr.analysis_id", "is not allowed"),
+])
+def test_history_and_saved_report_tables_are_never_queryable(sql, reason):
+    assert_blocked(sql, reason)
+
+
+def test_a_cte_named_like_an_app_table_reads_only_business_data():
+    # PostgreSQL resolves the name to the CTE, which is built from an allowed table.
+    assert validate_sql("WITH analyses AS (SELECT order_id FROM orders) SELECT order_id FROM analyses")
+
+
+def test_the_sql_prompt_never_mentions_the_app_tables():
+    from app.nl_to_sql import SYSTEM_INSTRUCTION
+
+    prompt = SYSTEM_INSTRUCTION.lower()
+    assert "analyses" not in prompt and "saved_reports" not in prompt and "datapilot." not in prompt
 
 
 # --- What may appear in FROM / JOIN ----------------------------------------------------

@@ -136,8 +136,9 @@ Middleware runs in this order for each request, outermost first: `SecurityHeader
 `RequestContext` → `CatchUnexpectedErrors` → `LimitRequestBody` → the route.
 
 Setup scripts live in `database/` (`schema.sql`, `seed.py`, `readonly_role.sql`,
-`create_readonly_role.py`, `apply_schema.py`, `api_roles.sql`, `revoke_api_roles.py`). They use the
-admin connection and are never part of the running API.
+`create_readonly_role.py`, `apply_schema.py`, `api_roles.sql`, `revoke_api_roles.py`, and for the
+planned History and Saved Reports `app_schema.sql`, `app_role.sql`, `create_app_role.py`). They use
+the admin connection and are never part of the running API.
 
 ## 5. Frontend Structure
 
@@ -184,6 +185,21 @@ current `products.price` or `products.cost` changes later. Profit never uses `pr
 **Read-only role:** the API connects only as `datapilot_readonly` (`database/readonly_role.sql`):
 `SELECT` on the six tables and nothing else, no inherited privileges, a connection limit, and every
 session read-only by default with a 5-second statement timeout.
+
+**Application data (History and Saved Reports, in progress, not live yet):** DataPilot's own data
+will live apart from the business data, in schema `datapilot` (`database/app_schema.sql`):
+
+| Table | Holds |
+|---|---|
+| `datapilot.analyses` | one row per successful analysis: a snapshot of the question, the SQL that ran, the columns and rows, row count, truncation flag, chart spec and insight, with `account_id` and `created_at` |
+| `datapilot.saved_reports` | an analysis the user chose to keep: a title and a reference to the analysis (at most one report per analysis), never a copy of it |
+
+It is written by a second role, `datapilot_app` (`database/app_role.sql`), with its own connection
+string, `APP_DATABASE_URL`: `SELECT` and `INSERT` on those two tables only, no `UPDATE` or `DELETE`,
+and no access to the business tables. `datapilot_readonly`, which runs the generated SQL, has no
+access to schema `datapilot`. `schema.sql` never touches it, so reseeding the business data keeps
+every analysis and saved report. The schema and role exist in the hosted database and are verified
+by live tests; no backend code uses them yet.
 
 ## 7. Business Semantics
 
