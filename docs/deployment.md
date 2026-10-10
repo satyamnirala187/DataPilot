@@ -46,6 +46,10 @@ Environment variables (names only; enter values in the Render dashboard):
 | `READONLY_DATABASE_URL` | yes | read-only role via the session pooler (a secret). The backend requires TLS whatever the URL says, so `?sslmode=require` is optional |
 | `GEMINI_API_KEY` | yes | Gemini API key |
 | `CORS_ALLOWED_ORIGINS` | yes | JSON list, see [CORS](#cors) |
+| `DEMO_USERNAME` | yes | the shared demo login name (a secret); see [Private demo access](#private-demo-access) |
+| `DEMO_PASSWORD` | yes | the shared demo password, at least 16 characters (a secret) |
+| `DEMO_SESSION_SECRET` | yes | signs session tokens, at least 32 characters (a secret, never shared) |
+| `DEMO_SESSION_MINUTES` | no | session length, default 120; leave unset |
 | `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS` | no | default 5 questions per 60 s per client |
 | `MAX_RESULT_BYTES` | no | default 1,000,000; larger answers are refused with 422 `result_too_large` |
 | `GLOBAL_DAILY_QUERY_LIMIT` | no | default 5 questions per Pacific day from all clients; set to `5` on Render. Size it to the Gemini quota: one question can use up to 4 Gemini requests |
@@ -95,7 +99,8 @@ is listed, so Vercel preview deployments (different URLs) cannot call the API.
 ## Deployment order
 
 1. Push the deployment configuration to GitHub.
-2. Deploy the backend on Render, with `CORS_ALLOWED_ORIGINS` set to the localhost origins for now.
+2. Deploy the backend on Render, with the `DEMO_*` secrets set and `CORS_ALLOWED_ORIGINS` set to
+   the localhost origins for now.
 3. Check `/health` on the Render URL.
 4. Copy the Render URL.
 5. Set `VITE_API_BASE_URL` to it in Vercel.
@@ -103,7 +108,86 @@ is listed, so Vercel preview deployments (different URLs) cannot call the API.
 7. Copy the Vercel production URL.
 8. Add it to `CORS_ALLOWED_ORIGINS` on Render.
 9. Save; Render restarts the service with the new value.
-10. Ask a question on the Vercel URL: frontend → Render → Supabase (and Gemini).
+10. Log in on the Vercel URL and ask a question: frontend → Render → Supabase (and Gemini).
+
+## Private demo access
+
+The hosted demo is behind one shared login, to protect the limited Gemini quota. It is a gate, not
+an account system: no sign-up, no user database, no cookies. The browser logs in with
+`POST /auth/login`, keeps the returned 2-hour token in `sessionStorage` and sends it as
+`Authorization: Bearer <token>`; the backend refuses every `POST /query` without a valid one, before
+any rate limit, Gemini call or database query. `/health` stays public. Details:
+`docs/safety-model.md`, "Request-level protection".
+
+### Setting the secrets
+
+Generate values **on your own machine** and paste them straight into Render (service →
+**Environment**). Never put them in Git, the README, screenshots or chat (including AI assistants).
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(18))"   # DEMO_PASSWORD (24 characters)
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"   # DEMO_SESSION_SECRET (64 characters)
+```
+
+`DEMO_USERNAME` can be any short name (1–100 characters). Keep the username and password somewhere
+private, such as a password manager, to share with people you invite. `DEMO_SESSION_SECRET` is
+never shared with anyone. The backend refuses to start if `DEMO_PASSWORD` is under 16 characters or
+`DEMO_SESSION_SECRET` under 32, and the error never shows the value.
+
+### Rolling out the login gate
+
+The backend and frontend changes go out together:
+
+1. **Add the three secrets in Render first.** The version running before the gate ignores unknown
+   `DEMO_*` settings, so this is harmless; saving may redeploy the current version.
+2. **Check they exist** in the Environment list, without revealing their values.
+3. **Push** the backend and frontend commits together.
+4. **Wait for both deploys.** Vercel usually finishes before Render, so for a few minutes the old
+   and new versions may be paired. Neither pairing opens `/query`: the new backend refuses it without
+   a session, and the new frontend cannot get past the login page until the new backend is live.
+5. **Verify without spending Gemini quota** (below).
+
+### Verifying without Gemini
+
+Use the browser for anything that needs the password; the `curl` checks need no credentials.
+
+1. `curl -s https://<service>.onrender.com/health` returns `{"status":"ok",...}`.
+2. The Vercel URL shows **Private Demo Access**, not the question box.
+3. A wrong username or password shows "Incorrect username or password." and no workspace. Each try
+   counts towards the limit of 5 logins per 15 minutes per network.
+4. The right credentials open the workspace.
+5. Reloading the tab returns to the workspace without logging in again (the stored session is
+   checked with `GET /auth/session`, which must return 200 in the Network tab).
+6. A question sent without a token is refused before Gemini:
+   `curl -s -X POST https://<service>.onrender.com/query -H 'Content-Type: application/json' -d '{"question":"test"}'`
+   returns 401 `unauthorized`, and the Render log line shows `stage=auth cause=missing_token
+   gemini_sql_attempts=0`.
+7. **Log out** returns to the login page. To confirm the server revoked the token, run in the
+   browser console *before* logging out `const t = sessionStorage.getItem('datapilot_demo_token')`
+   (it prints nothing), log out, then run
+   `fetch('https://<service>.onrender.com/auth/session', {headers: {Authorization: 'Bearer ' + t}}).then(r => console.log(r.status))`;
+   it prints `401`.
+8. `curl -s -o /dev/null -w '%{http_code}' https://<service>.onrender.com/docs` prints `404`.
+9. Steps 3–7 working from the Vercel site confirms CORS allows the `Authorization` header.
+
+One real question can then be asked, if you choose to spend Gemini quota on it.
+
+### Rotating access
+
+- **Change who can log in:** set a new `DEMO_PASSWORD` (and `DEMO_USERNAME`, if wanted). Existing
+  sessions keep working until they expire, at most 2 hours.
+- **Log everyone out now:** set a new `DEMO_SESSION_SECRET`. Every outstanding token stops working.
+
+Render restarts the service when a variable is saved. Logout revocations live in memory, so a
+restart forgets them: a logged-out token could then work again until its 2-hour expiry, which
+rotating `DEMO_SESSION_SECRET` also ends.
+
+### If the rollout goes wrong
+
+Never remove the gate by making `/query` public again; there is deliberately no switch to turn it
+off. Either fix forward, or revert the backend and frontend login commits **together** and push, so
+the previous version (with its rate limit and daily cap) returns as a whole. If login says
+"Demo access is temporarily unavailable", a `DEMO_*` secret is missing on Render.
 
 ## Security notes
 
@@ -173,6 +257,10 @@ the browser's developer tools (Network tab); search the logs for that ID to find
   daily cap; `cause=gemini_rate_limited` is Gemini's, with `limit_type` and `retry_after` when Gemini
   sent them.
 - `gemini_sql_attempts=2` or `3` means Gemini returned 5xx or network errors and was retried.
+- `stage=auth` lines are questions refused for want of a valid session (`cause=missing_token`,
+  `invalid_token`, `expired_token`, `revoked_token` or `not_configured`); nothing else ran.
+- `event=login` lines record each login attempt: `outcome=success`, `failure`, `rate_limited`,
+  `unavailable` or `invalid_request`. The username and password are never logged.
 - `insight_status=skipped_budget` means SQL generation and the database used most of the 45 s
   budget, so the optional insight was skipped.
 - Unexpected errors log an ERROR line with the exception type, its request ID and a code-location
@@ -191,5 +279,8 @@ line with the TCP peer, which on Render is the internal proxy address, not the v
 | Every question returns "The database is unavailable" | `READONLY_DATABASE_URL` is wrong, or uses the IPv6-only direct host instead of the pooler |
 | Questions return 429 with an AI-service limit message | Gemini's rate limit or quota was reached (`cause=gemini_rate_limited` in the logs); the rest of the app keeps working |
 | Questions return 503 "took too long" | Gemini did not answer within 20 s (`cause=gemini_timeout`) |
+| Login says "Demo access is temporarily unavailable" | `DEMO_USERNAME`, `DEMO_PASSWORD` or `DEMO_SESSION_SECRET` is not set on Render (`outcome=unavailable` in the logs); every question is refused meanwhile |
+| Render fails at startup after setting a `DEMO_*` secret | `DEMO_PASSWORD` is under 16 characters or `DEMO_SESSION_SECRET` under 32 |
+| Everyone is sent back to the login page | `DEMO_SESSION_SECRET` was changed, or sessions reached their 2-hour expiry |
 | Everyone shares one rate limit | `TRUST_CF_CONNECTING_IP` is not `true` on Render; see "Client IPs" above |
 | Questions return 429 "daily AI request limit" | DataPilot's global daily cap was reached (`cause=global_daily_limit`); it reopens at midnight Pacific time or after a restart |

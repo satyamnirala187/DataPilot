@@ -42,6 +42,7 @@ Before any model call, `backend/app/main.py`, `middleware.py`, `client_ip.py` an
 | Body size cap | Request bodies over **16 KB** are rejected with 413 before they are read into memory (checked from `Content-Length` and while streaming) |
 | Request shape | `POST /query` accepts JSON with exactly one field, `question`; extra fields, wrong types and malformed JSON get 400 |
 | Question length | **1–500 characters**; a whitespace-only question is rejected before Gemini is called |
+| Demo access | `POST /query` requires a session from the one shared demo login. `POST /auth/login` checks the username and password on the backend (constant-time, and the same 401 whichever is wrong) and returns a token signed with HMAC-SHA256 that expires after 2 hours; the frontend keeps it in `sessionStorage` and sends it as `Authorization: Bearer`. Without a valid token `/query` returns 401 before the rate limit, the daily cap, Gemini or the database. Logins are limited to 5 per 15 minutes per client. No cookies, user database or Supabase Auth. Logout revocations are kept in memory (a restart forgets them); changing `DEMO_SESSION_SECRET` ends every session. If the secrets are missing, login is unavailable and every question is refused |
 | Rate limit | **5 questions per 60 seconds per client** on `POST /query` (configurable); 429 `too_many_requests` with `Retry-After`. `/health` is not limited |
 | Daily cap | At most `GLOBAL_DAILY_QUERY_LIMIT` questions (default **5**) per day from **all clients together**, so IP rotation cannot get round it. The day runs midnight to midnight Pacific time (DST-aware), matching Gemini's requests-per-day quota. It counts questions: one question can use up to 4 Gemini requests (3 SQL attempts and 1 insight), so 5 questions fit a 20-requests-per-day free tier. Checked after the per-client limit and request validation, before the pipeline: each admitted question uses one unit, whatever happens next; malformed or per-client-refused requests and `/health` use none. Over the cap: 429 `daily_limit_reached`, with `Retry-After` set to the seconds until the next Pacific midnight. The configured number is never shown or logged |
 | Client identity | `CF-Connecting-IP` (set by Cloudflare in front of Render) when `TRUST_CF_CONNECTING_IP=true`, otherwise the connecting address. `X-Forwarded-For` is never used, because clients control it. IPv6 clients are grouped per /64 |
@@ -209,7 +210,8 @@ so provider messages, request details and the API key never reach the user.
 
 ## 9. Secrets and deployment boundaries
 
-- The Gemini API key and both database connection strings exist only on the backend (local `.env`,
+- The demo login secrets (`DEMO_USERNAME`, `DEMO_PASSWORD`, `DEMO_SESSION_SECRET`), the Gemini API key
+  and both database connection strings exist only on the backend (local `.env`,
   Render environment variables). In code they are `SecretStr`, so they are hidden in logs and
   error messages.
 - The frontend has no secrets. Vite only exposes variables prefixed `VITE_`, and the only one used
@@ -232,8 +234,9 @@ Gemini only ever returns text to the backend. It cannot:
 ## 11. Limitations
 
 - DataPilot is a portfolio and demo application, not a complete enterprise security platform.
-- There is no authentication or authorisation in v1; anyone with the URL can ask questions about
-  the synthetic dataset.
+- Access control is one shared demo login, not individual accounts: anyone given the credentials
+  has the same access, and a stored token can be read by script running in the page (mitigated by
+  React's escaping, no raw-HTML rendering and the 2-hour expiry).
 - The rate limiter and the daily cap are in memory: they are per server process and reset on
   restart, and several instances would each keep their own counts. Production runs a single
   process. They are best-effort safety brakes, not durable or distributed quotas; Gemini's own

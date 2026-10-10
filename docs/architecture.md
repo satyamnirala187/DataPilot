@@ -73,36 +73,40 @@ error JSON, which the frontend shows as an error panel.
 
 ## 3. Request Lifecycle
 
-1. **Question.** The user types a question (or picks an example) and presses Analyze or Enter.
+1. **Login.** The app opens on a login page. `POST /auth/login` checks the shared demo username
+   and password on the backend and returns a token valid for 2 hours, kept in `sessionStorage`.
+   On reload, `GET /auth/session` confirms it before the workspace is shown.
+2. **Question.** The user types a question (or picks an example) and presses Analyze or Enter.
    The frontend rejects an empty question itself.
-2. **Request.** `frontend/src/services/api.js` sends `POST /query` with `{"question": "..."}` to
-   the URL in `VITE_API_BASE_URL`, with a 60-second timeout.
-3. **Checks before any AI call.** Middleware rejects bodies over 16 KB and only answers browser
+3. **Request.** `frontend/src/services/api.js` sends `POST /query` with `{"question": "..."}` and
+   `Authorization: Bearer <token>` to the URL in `VITE_API_BASE_URL`, with a 60-second timeout.
+4. **Checks before any AI call.** The session is checked first: without a valid one the request
+   gets 401 and nothing else runs. Middleware rejects bodies over 16 KB and only answers browser
    requests from the configured origins. `QueryRequest` accepts exactly one field, `question`,
    of 1–500 characters. The rate limiter allows 5 questions per 60 seconds per client, and a global
    cap allows a fixed number of questions per Pacific day from all clients together (both configurable).
-4. **SQL generation.** `generate_sql` sends Gemini a system prompt containing the six-table schema,
+5. **SQL generation.** `generate_sql` sends Gemini a system prompt containing the six-table schema,
    the business definitions and the SQL rules, with the user's question wrapped as untrusted data.
    Gemini must return structured JSON (`{"sql": ...}`). Transient failures (5xx, network) are
    retried twice, after 0.5 s and 1 s; other errors are not retried.
-5. **Validation.** `validate_sql` parses the SQL with SQLGlot and checks the syntax tree: one
+6. **Validation.** `validate_sql` parses the SQL with SQLGlot and checks the syntax tree: one
    statement, read-only (`SELECT` / `WITH … SELECT`, nothing that writes or locks, including inside
    CTEs), only the six tables, no blocked or amplifying functions, no cross joins or recursion, and
    a `LIMIT` (added or capped at 501: 500 rows plus one row that only shows whether more exist).
-6. **Only approved SQL continues.** If validation fails, the request ends with HTTP 400
+7. **Only approved SQL continues.** If validation fails, the request ends with HTTP 400
    `unsafe_sql`; the SQL is never sent to the database. The validator's rewritten SQL (for example
    with the added `LIMIT`) is what runs and what the user sees.
-7. **Execution.** `execute_query` connects with `READONLY_DATABASE_URL` as the `datapilot_readonly`
+8. **Execution.** `execute_query` connects with `READONLY_DATABASE_URL` as the `datapilot_readonly`
    role, inside a read-only transaction that is always rolled back, with a statement timeout.
-8. **Rows.** At most 500 rows are kept (`truncated` says if there were more), converted to
+9. **Rows.** At most 500 rows are kept (`truncated` says if there were more), converted to
    JSON-friendly values. A result whose JSON exceeds `MAX_RESULT_BYTES` (default 1 MB) is refused.
-9. **Visualization.** `select_visualization` chooses KPI, bar, line or table from the shape of the
+10. **Visualization.** `select_visualization` chooses KPI, bar, line or table from the shape of the
    result (section 8). No model is involved.
-10. **Insight.** If there are rows, `generate_insight` asks Gemini for a short summary of the first
+11. **Insight.** If there are rows, `generate_insight` asks Gemini for a short summary of the first
     50 rows, the row count and the truncated flag. It is never retried.
-11. **Insight failures are absorbed.** Any insight error sets `insight` to `null`; the query result
+12. **Insight failures are absorbed.** Any insight error sets `insight` to `null`; the query result
     is still returned with HTTP 200.
-12. **Display.** The frontend renders the insight (or a quiet "Insight temporarily unavailable"
+13. **Display.** The frontend renders the insight (or a quiet "Insight temporarily unavailable"
     note), the KPI or chart, the result table and the generated SQL.
 
 The **query result is the authoritative answer**. The insight only describes those rows and can be
@@ -271,6 +275,9 @@ provider errors.
 | Query exceeds the statement timeout | HTTP 504 `query_timeout` |
 | Database unreachable | HTTP 503 `database_unavailable` |
 | Insight generation fails for any reason | HTTP 200 with the full result and `insight: null` |
+| No valid demo session (missing, expired, revoked or forged token) | HTTP 401 `unauthorized`; the frontend returns to the login page. No rate-limit slot, daily-cap unit, Gemini call or query is used |
+| Wrong demo username or password | HTTP 401 `invalid_credentials`, the same for either |
+| Too many login attempts from one client | HTTP 429 `too_many_login_attempts` with a `Retry-After` header |
 | Too many questions from one client | HTTP 429 `too_many_requests` with a `Retry-After` header |
 | Daily question cap reached (all clients) | HTTP 429 `daily_limit_reached`, `Retry-After` until midnight Pacific time; the pipeline is not called |
 | Request body over 16 KB | HTTP 413 `request_too_large` |
@@ -292,7 +299,7 @@ event=query_complete request_id=51c7d0e2a94b6f83 outcome=error status=429 error_
 ```
 
 - `error_kind` is the code the client received; `stage` (`request`, `app_rate_limit`, `sql`,
-  `validation`, `db`, `internal`) and `cause` say where and why. Causes include `app_rate_limited`
+  `validation`, `db`, `internal`, `auth`) and `cause` say where and why. Causes include `app_rate_limited`
   (DataPilot's per-client limit) and `global_daily_limit` (its daily cap) versus `gemini_rate_limited`, `gemini_unavailable`, `gemini_timeout`,
   `gemini_invalid_response`, `validator_rejected`, `db_timeout`, `db_unavailable`,
   `db_query_error` and `db_result_too_large`; an unexpected exception gives its type.

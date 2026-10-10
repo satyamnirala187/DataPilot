@@ -7,7 +7,8 @@ PostgreSQL query, checks that the query is safe and read-only, runs it against a
 and shows the answer as a KPI, chart or table, together with the SQL that ran and a short optional
 AI insight. It is built around a fictional e-commerce store with synthetic data.
 
-**Live app:** [data-pilot-flax.vercel.app](https://data-pilot-flax.vercel.app)
+**Live app:** [data-pilot-flax.vercel.app](https://data-pilot-flax.vercel.app). The hosted demo is
+access-controlled to protect limited third-party API quota; demo credentials are shared privately.
 
 > DataPilot uses the Gemini API to write SQL. When Gemini's rate limits or availability are hit,
 > questions can be temporarily unavailable; the app shows a clear message asking you to try again.
@@ -69,6 +70,7 @@ does not depend on external Gemini quota.
   result is still shown.
 - **Visible SQL** for every answer, with a Copy SQL button.
 - **Safe, structured errors** with friendly messages and no internal details.
+- **Private demo access**: one shared login, checked by the backend, before any question is answered.
 - **Per-client rate limiting** and a **global daily question cap** to protect the AI quota.
 - **Responsive interface** for desktop and mobile.
 - **Deployed** on Vercel (frontend), Render (backend) and Supabase (database).
@@ -98,7 +100,8 @@ credentials never leave it.
 **LLM-generated SQL is treated as untrusted input.** Safety does not rely on the prompt; it is
 enforced by independent layers in code and in the database:
 
-1. **Request checks**: body size cap, a single `question` field of 1 to 500 characters, rate limit.
+1. **Request checks**: a valid demo session, body size cap, a single `question` field of 1 to 500
+   characters, rate limit and daily cap.
 2. **SQLGlot structural validation**: the query is parsed and its syntax tree is checked.
 3. **Allowlists**: only the six business tables, the `public` schema and safe functions.
 4. **No writes or admin SQL**: `INSERT`, `UPDATE`, `DELETE`, DDL, `GRANT`, row locks and multiple
@@ -236,6 +239,10 @@ cd backend
 ../.venv/bin/uvicorn app.main:app --reload --port 8000
 ```
 
+To use the app locally, also set `DEMO_USERNAME`, `DEMO_PASSWORD` (16+ characters) and
+`DEMO_SESSION_SECRET` (32+ characters) in `.env`: any values of your own, which you then type on
+the login page. Without them, login is unavailable and every question is refused.
+
 Check `http://localhost:8000/health`. For the interactive API docs at `http://localhost:8000/docs`,
 set `ENABLE_API_DOCS=true` in `.env`; they are off by default and in production.
 
@@ -260,6 +267,8 @@ Backend (in the project-root `.env` locally, or in the Render dashboard):
 | `GEMINI_API_KEY` | Gemini API key |
 | `CORS_ALLOWED_ORIGINS` | optional; JSON list of browser origins allowed to call the API (defaults to the local Vite origins) |
 | `TRUST_CF_CONNECTING_IP` | optional; `true` only behind Cloudflare, as on Render, so rate limiting uses the real client IP |
+| `DEMO_USERNAME`, `DEMO_PASSWORD`, `DEMO_SESSION_SECRET` | the shared demo login and the key that signs its sessions (password 16+, secret 32+ characters); without them every question is refused |
+| `DEMO_SESSION_MINUTES` | optional; session length in minutes (default 120) |
 | `ENABLE_API_DOCS` | optional; `true` to serve `/docs`, `/redoc` and `/openapi.json` (default off) |
 | `GLOBAL_DAILY_QUERY_LIMIT` | optional; questions per day from all clients together (default 5). The day resets at midnight Pacific time, like Gemini's daily quota; one question can use up to 4 Gemini requests |
 | `DATABASE_URL` | admin connection for the setup scripts in `database/` only; not used by the running app |
@@ -312,8 +321,9 @@ measure of Gemini's accuracy**.
 | Backend | Render |
 | Database | Supabase PostgreSQL |
 
-The backend only accepts browser requests from configured frontend origins (CORS). The Gemini key
-and database credentials stay on the backend, and the running app connects with the read-only role.
+The backend only accepts browser requests from configured frontend origins (CORS). The Gemini key,
+database credentials and demo login secrets stay on the backend, and the running app connects with
+the read-only role.
 
 [Deployment guide](docs/deployment.md)
 
@@ -332,7 +342,8 @@ debugging.
 
 ## Limitations
 
-- No authentication in v1; the app is a public demo over synthetic data.
+- Access is one shared demo login, not user accounts; logging out is remembered only until the
+  backend restarts (sessions still expire after 2 hours).
 - The dataset is a synthetic e-commerce store, not real business data.
 - Rate limiting and the daily cap are in memory, so they are per server process and reset on restart.
 - Gemini availability and quota can make AI requests temporarily unavailable.
