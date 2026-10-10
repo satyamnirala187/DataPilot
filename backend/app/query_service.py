@@ -6,12 +6,14 @@ Only SQL approved by the validator is ever passed to the executor.
 
 The insight is optional: if it fails, the result is still returned, with insight = None.
 
+Each step records its outcome and timing in a QueryMetrics object (app.request_log), which is
+logged as one summary line per request. Nothing here logs the question, the SQL or the rows.
+
 REQUEST_BUDGET_SECONDS is a cooperative budget, not a hard deadline: nothing is interrupted
 mid-call. Instead every external call has its own timeout, and a retry or the insight call only
 starts if there is still time for it (and everything after it) to finish within the budget.
 """
 
-import logging
 import time
 from collections.abc import Callable
 from typing import Any
@@ -22,9 +24,8 @@ from app.chart_selector import Visualization, select_visualization
 from app.db_executor import QueryExecutionError, QueryResult, execute_query
 from app.insight_service import INSIGHT_TIMEOUT_MS, InsightError, generate_insight
 from app.nl_to_sql import SQL_GENERATION_TIMEOUT_MS, SQLGenerationError, generate_sql
+from app.request_log import QueryMetrics, new_request_id
 from app.sql_validator import UnsafeSQLError, validate_sql
-
-logger = logging.getLogger(__name__)
 
 # Gemini sometimes answers 503 (overloaded). Only fast transient failures (kind "unavailable": 5xx or
 # network errors) are retried, twice, waiting 0.5 s and then 1 s. 4xx errors (including 429) and
@@ -77,27 +78,36 @@ def run_business_query(
     summarize: Callable[[str, list[str], list[list[Any]], bool], str] = generate_insight,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
+    metrics: QueryMetrics | None = None,
 ) -> QueryResponse:
     """Answer a business question with data. The keyword arguments exist so tests can swap steps."""
+    metrics = metrics if metrics is not None else QueryMetrics(request_id=new_request_id())
     question = (question or "").strip()
     if not question:
+        metrics.fail("request", "invalid_question")
         raise QueryServiceError("invalid_question", "Please enter a question.")
     deadline = clock() + REQUEST_BUDGET_SECONDS
 
-    generated_sql = _generate_with_retry(question, generate, sleep, lambda: deadline - clock())
+    with metrics.timed("sql", clock):
+        generated_sql = _generate_with_retry(question, generate, sleep, lambda: deadline - clock(), metrics)
 
-    try:
-        safe_sql = validate(generated_sql)
-    except UnsafeSQLError as error:
-        logger.warning("Generated SQL rejected by the validator: %s", error)
-        raise QueryServiceError("unsafe_sql", "The generated query was rejected by the safety checks.") from None
+    with metrics.timed("validation", clock):
+        try:
+            safe_sql = validate(generated_sql)
+        except UnsafeSQLError:
+            # The validator's message quotes parts of the generated SQL, so it is not logged.
+            metrics.fail("validation", "validator_rejected")
+            raise QueryServiceError("unsafe_sql", "The generated query was rejected by the safety checks.") from None
 
-    try:
-        result = execute(safe_sql)
-    except QueryExecutionError as error:
-        logger.warning("Query execution failed (%s): %s", error.kind, error)
-        raise _execution_error(error.kind) from None
+    with metrics.timed("db", clock):
+        try:
+            result = execute(safe_sql)
+        except QueryExecutionError as error:
+            metrics.fail("db", f"db_{error.kind}")
+            raise _execution_error(error.kind) from None
 
+    visualization = select_visualization(result.columns, result.rows)
+    metrics.rows, metrics.truncated, metrics.visualization = len(result.rows), result.truncated, visualization.type
     return QueryResponse(
         question=question,
         sql=safe_sql,
@@ -105,44 +115,49 @@ def run_business_query(
         rows=result.rows,
         row_count=len(result.rows),
         truncated=result.truncated,
-        visualization=select_visualization(result.columns, result.rows),
-        insight=_optional_insight(question, result, summarize, lambda: deadline - clock()),
+        visualization=visualization,
+        insight=_optional_insight(question, result, summarize, lambda: deadline - clock(), metrics, clock),
     )
 
 
 def _optional_insight(question: str, result: QueryResult, summarize: Callable[..., str],
-                      time_left: Callable[[], float]) -> str | None:
+                      time_left: Callable[[], float], metrics: QueryMetrics,
+                      clock: Callable[[], float]) -> str | None:
     """The insight, or None. A failure here never turns a successful query into an error."""
     if not result.rows:
-        return None  # nothing to summarise, so no Gemini call
-    remaining = time_left()
-    if remaining < INSIGHT_SECONDS + SAFETY_MARGIN_SECONDS:
-        # Not enough time for the insight call to finish; the result matters more.
-        logger.warning("Insight skipped (budget): %.1f s left, needs %.0f s",
-                       remaining, INSIGHT_SECONDS + SAFETY_MARGIN_SECONDS)
+        metrics.insight_status = "skipped_empty"  # nothing to summarise, so no Gemini call
         return None
-    try:
-        return summarize(question, result.columns, result.rows, result.truncated)
-    except InsightError as error:
-        logger.warning("Insight skipped (%s): %s", error.kind, error)
-    except Exception as error:  # the insight is optional; never let it break the answer
-        logger.warning("Insight skipped (unexpected %s)", type(error).__name__)
-    return None
+    if time_left() < INSIGHT_SECONDS + SAFETY_MARGIN_SECONDS:
+        # Not enough time for the insight call to finish; the result matters more.
+        metrics.insight_status = "skipped_budget"
+        return None
+    with metrics.timed("insight", clock):
+        try:
+            insight = summarize(question, result.columns, result.rows, result.truncated)
+        except InsightError as error:
+            metrics.insight_status, metrics.insight_error = "failed", error.kind
+            return None
+        except Exception as error:  # the insight is optional; never let it break the answer
+            metrics.insight_status, metrics.insight_error = "failed", type(error).__name__
+            return None
+    metrics.insight_status = "success"
+    return insight
 
 
 def _generate_with_retry(question: str, generate: Callable[[str], str], sleep: Callable[[float], None],
-                        time_left: Callable[[], float]) -> str:
+                        time_left: Callable[[], float], metrics: QueryMetrics) -> str:
     for delay in (*GEMINI_RETRY_DELAYS, None):
+        metrics.gemini_sql_attempts += 1
         try:
             return generate(question)
         except SQLGenerationError as error:
             # Retry only if the wait, a full attempt and the database reserve still fit in the budget.
             needed = (delay or 0) + SQL_ATTEMPT_SECONDS + DB_STAGE_RESERVE_SECONDS
             if error.kind == "unavailable" and delay is not None and time_left() >= needed:
-                logger.info("Gemini unavailable; retrying in %.1f s", delay)
                 sleep(delay)
                 continue
-            logger.warning("SQL generation failed (%s): %s", error.kind, error)
+            metrics.fail("sql", f"gemini_{error.kind}")
+            metrics.limit_type = error.limit_type
             raise _generation_error(error) from None
     raise AssertionError("unreachable")
 

@@ -33,7 +33,7 @@ def pipeline(monkeypatch):
     """Replace the real pipeline. Set .result to a QueryResponse or an exception."""
     state = type("State", (), {"result": SUCCESS, "questions": []})()
 
-    def fake_run(question):
+    def fake_run(question, **_):
         state.questions.append(question)
         if isinstance(state.result, Exception):
             raise state.result

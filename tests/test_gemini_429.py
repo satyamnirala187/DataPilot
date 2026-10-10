@@ -60,7 +60,7 @@ def ask_api(monkeypatch, error):
     client, calls = gemini(error)
     slept = []
     monkeypatch.setattr(main, "rate_limiter", RateLimiter(max_requests=100, window_seconds=60))
-    monkeypatch.setattr(main, "run_business_query", lambda question: run_business_query(
+    monkeypatch.setattr(main, "run_business_query", lambda question, **_: run_business_query(
         question, generate=lambda q: generate_sql(q, client=client), execute=lambda sql: RESULT,
         summarize=lambda *a: None, sleep=slept.append))
     response = TestClient(main.app).post("/query", json={"question": "What is our total revenue?"})
@@ -190,7 +190,7 @@ def test_sql_generation_error_carries_the_classification():
 def test_insight_429_keeps_the_successful_result_and_is_not_retried(monkeypatch):
     insight_client, insight_calls = gemini(error_429(quota_failure(PER_MINUTE), retry_info("30s")))
     monkeypatch.setattr(main, "rate_limiter", RateLimiter(max_requests=100, window_seconds=60))
-    monkeypatch.setattr(main, "run_business_query", lambda question: run_business_query(
+    monkeypatch.setattr(main, "run_business_query", lambda question, **_: run_business_query(
         question, generate=lambda q: SQL, execute=lambda sql: RESULT,
         summarize=lambda *args: generate_insight(*args, client=insight_client)))
     response = TestClient(main.app).post("/query", json={"question": "What is our total revenue?"})

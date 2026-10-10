@@ -88,7 +88,7 @@ OK = QueryResponse(question="q", sql="SELECT 1 LIMIT 500", columns=["n"], rows=[
 def api(monkeypatch):
     """Every request arrives from the same proxy address, as on Render; 2 questions per minute."""
     monkeypatch.setattr(main, "rate_limiter", RateLimiter(max_requests=2, window_seconds=60))
-    monkeypatch.setattr(main, "run_business_query", lambda question: OK)
+    monkeypatch.setattr(main, "run_business_query", lambda question, **_: OK)
     client = TestClient(main.app, client=(PROXY, 5000))
 
     def ask(**headers):

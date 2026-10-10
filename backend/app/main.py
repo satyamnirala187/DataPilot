@@ -1,7 +1,5 @@
 """DataPilot API entry point."""
 
-import logging
-
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,11 +9,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.client_ip import client_ip
 from app.config import settings
-from app.middleware import CatchUnexpectedErrors, LimitRequestBody, SecurityHeaders, error_response
+from app.middleware import CatchUnexpectedErrors, LimitRequestBody, RequestContext, SecurityHeaders, error_response
 from app.query_service import QueryResponse, QueryServiceError, run_business_query
 from app.rate_limiter import RateLimiter
+from app.request_log import QueryMetrics, configure_logging
 
-logger = logging.getLogger(__name__)
+configure_logging()
 
 MAX_QUESTION_LENGTH = 500
 # A 500-character question fits in well under 4 KB of JSON; anything far bigger is not a question.
@@ -26,10 +25,12 @@ app = FastAPI(title=settings.app_name)
 # Middleware, innermost first (each add_middleware wraps everything added before it):
 #   LimitRequestBody      reject oversized bodies before they are read
 #   CatchUnexpectedErrors unhandled exceptions -> safe 500 JSON, still inside CORS
+#   RequestContext        X-Request-ID on every response; one summary log line per POST /query
 #   CORSMiddleware        only the configured frontend origins may call the API; no cookies
 #   SecurityHeaders       added to every response, errors included
 app.add_middleware(LimitRequestBody, max_bytes=MAX_REQUEST_BODY_BYTES)
 app.add_middleware(CatchUnexpectedErrors)
+app.add_middleware(RequestContext)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins,
@@ -70,14 +71,24 @@ class QueryRequest(BaseModel):
     question: str = Field(min_length=1, max_length=MAX_QUESTION_LENGTH)
 
 
+def query_metrics(request: Request) -> QueryMetrics:
+    """This request's metrics, created by RequestContext and logged when the response is sent."""
+    return request.state.query_metrics
+
+
 @app.exception_handler(QueryServiceError)
 def handle_query_error(request: Request, error: QueryServiceError) -> JSONResponse:
+    metrics = query_metrics(request)
+    metrics.error_kind, metrics.retry_after = error.kind, error.retry_after
     headers = {"Retry-After": str(error.retry_after)} if error.retry_after else None
     return error_response(STATUS_BY_ERROR_KIND.get(error.kind, 500), error.kind, str(error), headers=headers)
 
 
 @app.exception_handler(RequestValidationError)
 def handle_invalid_request(request: Request, error: RequestValidationError) -> JSONResponse:
+    metrics = query_metrics(request)
+    metrics.error_kind = "invalid_request"
+    metrics.fail("request", "invalid_request")
     message = f"Send JSON like {{\"question\": \"...\"}} with a question of 1-{MAX_QUESTION_LENGTH} characters."
     return error_response(400, "invalid_request", message)
 
@@ -87,13 +98,18 @@ def handle_http_error(request: Request, error: StarletteHTTPException) -> JSONRe
     # Replaces FastAPI's {"detail": ...} so every error has the same shape. Headers such as
     # Allow (405) and Retry-After (429) are kept.
     code, message = HTTP_ERRORS.get(error.status_code, ("http_error", "The request could not be completed."))
+    query_metrics(request).error_kind = code
     return error_response(error.status_code, code, message, headers=error.headers)
 
 
 def enforce_rate_limit(request: Request) -> None:
     retry_after = rate_limiter.check(client_ip(request))
     if retry_after is not None:
-        logger.warning("Rate limit reached for a client; retry in %d s", retry_after)
+        # DataPilot's own limit, logged as cause=app_rate_limited (Gemini's is cause=gemini_rate_limited).
+        # The client address is never logged.
+        metrics = query_metrics(request)
+        metrics.fail("app_rate_limit", "app_rate_limited")
+        metrics.retry_after = retry_after
         raise HTTPException(status_code=429, headers={"Retry-After": str(retry_after)})
 
 
@@ -104,6 +120,8 @@ def health() -> dict[str, str]:
 
 
 @app.post("/query", response_model=QueryResponse, dependencies=[Depends(enforce_rate_limit)])
-def query(request: QueryRequest) -> QueryResponse:
+def query(body: QueryRequest, request: Request) -> QueryResponse:
     """Answer a business question: generate SQL, validate it, run it read-only, return the rows."""
-    return run_business_query(request.question)
+    metrics = query_metrics(request)
+    metrics.question_length = len(body.question)  # the length only; the text is never logged
+    return run_business_query(body.question, metrics=metrics)

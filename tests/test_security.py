@@ -60,7 +60,7 @@ def pipeline(monkeypatch):
     """Replace the real pipeline. Set .result to a QueryResponse or an exception."""
     state = SimpleNamespace(result=OK, calls=0)
 
-    def fake_run(question):
+    def fake_run(question, **_):
         state.calls += 1
         if isinstance(state.result, Exception):
             raise state.result
@@ -351,7 +351,7 @@ def test_the_validator_adjusted_sql_is_what_gets_executed(generated, expected_li
 
 
 def test_api_returns_the_result_when_only_the_insight_fails(client, monkeypatch):
-    def pipeline_with_failing_insight(question):
+    def pipeline_with_failing_insight(question, **_):
         return run_business_query(
             question, generate=lambda q: "SELECT SUM(amount) AS total_revenue FROM payments",
             validate=validate_sql, execute=lambda sql: QueryResult(["total_revenue"], [[21304631.99]], False),

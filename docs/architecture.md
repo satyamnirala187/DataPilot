@@ -121,12 +121,13 @@ All backend code is in `backend/app/`.
 | `db_executor.py` | `execute_query`: runs approved SQL as the read-only role, with timeout and row cap; `to_json_value` converts PostgreSQL types; `QueryExecutionError` hides connection details |
 | `chart_selector.py` | `select_visualization` and the `Visualization` model (`type`, `x_key`, `y_key`) |
 | `insight_service.py` | `generate_insight`: the optional summary prompt, a 15-second timeout, output length checks, and `InsightError` |
-| `middleware.py` | Plain ASGI middleware: `LimitRequestBody` (16 KB), `CatchUnexpectedErrors` (safe 500s that still carry CORS headers), `SecurityHeaders`, and `error_response` |
+| `middleware.py` | Plain ASGI middleware: `RequestContext` (request ID and summary log line), `LimitRequestBody` (16 KB), `CatchUnexpectedErrors` (safe 500s that still carry CORS headers), `SecurityHeaders`, and `error_response` |
+| `request_log.py` | Logging setup, request IDs and `QueryMetrics`: the outcome, stage timings and Gemini attempt count of one request, logged as a single `key=value` line |
 | `client_ip.py` | `client_ip`: the rate-limit identity, from `CF-Connecting-IP` when `TRUST_CF_CONNECTING_IP` is on, otherwise the TCP peer. `X-Forwarded-For` is never used |
 | `rate_limiter.py` | `RateLimiter`: an in-memory sliding window per client |
 
 Middleware runs in this order for each request, outermost first: `SecurityHeaders` → CORS →
-`CatchUnexpectedErrors` → `LimitRequestBody` → the route.
+`RequestContext` → `CatchUnexpectedErrors` → `LimitRequestBody` → the route.
 
 Setup scripts live in `database/` (`schema.sql`, `seed.py`, `readonly_role.sql`,
 `create_readonly_role.py`, `apply_schema.py`). They use the admin connection and are never part of
@@ -269,8 +270,34 @@ provider errors.
 | Insight generation fails for any reason | HTTP 200 with the full result and `insight: null` |
 | Too many questions from one client | HTTP 429 `too_many_requests` with a `Retry-After` header |
 | Request body over 16 KB | HTTP 413 `request_too_large` |
-| Any unexpected server error | HTTP 500 `internal_error` with a generic message; details stay in the server log |
+| Any unexpected server error | HTTP 500 `internal_error` with a generic message; the exception type and code location stay in the server log |
 
 On the frontend, temporary problems (rate limits, unavailable services, timeouts, an unreachable
 backend) are shown as calm amber notices; other errors as red panels. An unavailable insight is
 never shown as an error.
+
+### Request logs
+
+Every response carries a random `X-Request-ID` header, and every `POST /query` produces exactly
+one summary line on the `app.request_log` logger, at INFO for successes, WARNING for handled errors
+and ERROR for unexpected ones:
+
+```
+event=query_complete request_id=9b2e41f07ac3d158 outcome=success status=200 question_length=34 total_ms=2481 gemini_sql_attempts=1 sql_ms=1630 validation_ms=4 db_ms=212 rows=5 truncated=false visualization=bar insight_status=success insight_ms=611
+event=query_complete request_id=51c7d0e2a94b6f83 outcome=error status=429 error_kind=rate_limited stage=sql cause=gemini_rate_limited limit_type=quota_exhausted retry_after=40 question_length=21 total_ms=388 gemini_sql_attempts=1 sql_ms=377
+```
+
+- `error_kind` is the code the client received; `stage` (`request`, `app_rate_limit`, `sql`,
+  `validation`, `db`, `internal`) and `cause` say where and why. Causes include `app_rate_limited`
+  (DataPilot's own limit) versus `gemini_rate_limited`, `gemini_unavailable`, `gemini_timeout`,
+  `gemini_invalid_response`, `validator_rejected`, `db_timeout`, `db_unavailable` and
+  `db_query_error`; an unexpected exception gives its type.
+- `gemini_sql_attempts` is counted as attempts happen; `sql_ms` includes the waits between retries.
+- `insight_status` is `success`, `failed` (with `insight_error`), `skipped_budget` or
+  `skipped_empty`.
+- Timings are whole milliseconds from a monotonic clock. Fields that do not apply are left out.
+
+The line never contains the question (only its length), the generated SQL, result rows, client
+addresses, connection strings, the API key or provider error bodies. Gemini and validator messages
+are not logged either, because they can quote the question or the SQL. Library loggers such as
+httpx stay at WARNING, so request URLs are not logged.

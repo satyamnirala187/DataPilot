@@ -47,6 +47,7 @@ Before any model call, `backend/app/main.py`, `middleware.py`, `client_ip.py` an
 | CORS | Only origins listed in `CORS_ALLOWED_ORIGINS` (the production Vercel URL and localhost), only `GET`/`POST`, only the `Content-Type` header, no credentials, never `*` |
 | Security headers | Every response: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` |
 | Error handling | Every error uses `{"error": {"code", "message"}}`. Unexpected exceptions become a generic 500 (still with CORS headers) and are logged by type and code location only |
+| Logging | One `key=value` summary line per question, with a random request ID (also sent as `X-Request-ID`), the outcome, stage timings and counts. Never the question text, the SQL, result rows, client IPs, secrets or provider error bodies (see `docs/architecture.md`, "Request logs") |
 
 ## 3. Model output is untrusted
 

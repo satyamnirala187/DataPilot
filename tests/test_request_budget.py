@@ -241,7 +241,7 @@ def test_api_returns_200_when_the_insight_is_skipped_for_time(monkeypatch):
     clock = FakeClock()
     steps = Steps(clock, [(20.0, None)], execute_seconds=11.0)
     monkeypatch.setattr(main, "rate_limiter", RateLimiter(max_requests=100, window_seconds=60))
-    monkeypatch.setattr(main, "run_business_query", lambda question: steps.run())
+    monkeypatch.setattr(main, "run_business_query", lambda question, **_: steps.run())
     response = TestClient(main.app).post("/query", json={"question": "What is our total revenue?"})
     assert response.status_code == 200
     body = response.json()
@@ -311,7 +311,7 @@ def test_request_timing_uses_a_monotonic_clock():
 def test_generation_timeout_reaches_the_user_as_a_safe_503(monkeypatch):
     monkeypatch.setattr(main, "rate_limiter", RateLimiter(max_requests=100, window_seconds=60))
 
-    def timed_out(question):
+    def timed_out(question, **_):
         raise QueryServiceError("generation_timeout", "The AI service took too long to respond. Please try again.")
 
     monkeypatch.setattr(main, "run_business_query", timed_out)

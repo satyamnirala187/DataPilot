@@ -131,6 +131,25 @@ example a phone on mobile data) still gets 400 `invalid_question`. If both netwo
 limit, `CF-Connecting-IP` is not reaching the app; check `TRUST_CF_CONNECTING_IP` before treating
 the rate limiter as production-verified.
 
+## Reading the logs
+
+Render's **Logs** tab shows one line per question from `app.request_log` (format and fields:
+`docs/architecture.md`, "Request logs"). Every response has an `X-Request-ID` header, visible in
+the browser's developer tools (Network tab); search the logs for that ID to find the request.
+
+- `outcome=error` lines name the failure: `stage` and `cause` (for example `cause=gemini_timeout`,
+  `cause=db_unavailable`), plus `error_kind`, the code the user saw.
+- `cause=app_rate_limited` is DataPilot's own 5-per-minute limit; `cause=gemini_rate_limited` is
+  Gemini's, with `limit_type` and `retry_after` when Gemini sent them.
+- `gemini_sql_attempts=2` or `3` means Gemini returned 5xx or network errors and was retried.
+- `insight_status=skipped_budget` means SQL generation and the database used most of the 45 s
+  budget, so the optional insight was skipped.
+- Unexpected errors log an ERROR line with the exception type, its request ID and a code-location
+  traceback (no exception message).
+
+Questions, SQL, rows and secrets are never logged. Uvicorn's access log still records each request
+line with the TCP peer, which on Render is the internal proxy address, not the visitor's.
+
 ## Troubleshooting
 
 | Symptom | Likely cause |
@@ -139,5 +158,6 @@ the rate limiter as production-verified.
 | First request after a while is very slow | Render's free plan sleeps when idle; the first request wakes it (the frontend waits up to 60 s) |
 | Render fails at startup with a settings error | `CORS_ALLOWED_ORIGINS` is not a JSON list |
 | Every question returns "The database is unavailable" | `READONLY_DATABASE_URL` is wrong, or uses the IPv6-only direct host instead of the pooler |
-| Questions return 429 with an AI-service limit message | Gemini's rate limit or quota was reached; the rest of the app keeps working |
+| Questions return 429 with an AI-service limit message | Gemini's rate limit or quota was reached (`cause=gemini_rate_limited` in the logs); the rest of the app keeps working |
+| Questions return 503 "took too long" | Gemini did not answer within 20 s (`cause=gemini_timeout`) |
 | Everyone shares one rate limit | `TRUST_CF_CONNECTING_IP` is not `true` on Render; see "Client IPs" above |

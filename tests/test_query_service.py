@@ -6,6 +6,7 @@ from app.db_executor import QueryExecutionError, QueryResult
 from app.insight_service import InsightError
 from app.nl_to_sql import SQLGenerationError
 from app.query_service import GEMINI_RETRY_DELAYS, QueryServiceError, run_business_query
+from app.request_log import QueryMetrics
 from app.sql_validator import UnsafeSQLError, validate_sql
 
 RAW_SQL = "SELECT SUM(oi.quantity * oi.unit_price) AS revenue FROM orders o JOIN order_items oi ON oi.order_id = o.order_id"
@@ -50,9 +51,10 @@ class Pipeline:
             raise self.insight
         return self.insight
 
-    def run(self, question="What is our total revenue?"):
+    def run(self, question="What is our total revenue?", metrics=None):
         return run_business_query(question, generate=self.generate, validate=self.validate,
-                                  execute=self.execute, summarize=self.summarize, sleep=self.slept.append)
+                                  execute=self.execute, summarize=self.summarize, sleep=self.slept.append,
+                                  metrics=metrics)
 
 
 def failure(pipeline: Pipeline, question="What is our total revenue?") -> QueryServiceError:
@@ -330,8 +332,10 @@ def test_insight_failure_still_returns_the_query_result(insight_error):
 
 
 def test_insight_failure_logs_only_sanitized_details(caplog):
-    Pipeline(insight=RuntimeError("password=hunter2 host=db.internal")).run()
-    assert "hunter2" not in caplog.text and "RuntimeError" in caplog.text
+    metrics = QueryMetrics(request_id="test")
+    Pipeline(insight=RuntimeError("password=hunter2 host=db.internal")).run(metrics=metrics)
+    assert "hunter2" not in caplog.text and "hunter2" not in metrics.summary()
+    assert "insight_status=failed insight_error=RuntimeError" in metrics.summary()
 
 
 def test_empty_result_skips_the_insight_call():
