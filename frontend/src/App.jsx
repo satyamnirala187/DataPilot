@@ -6,13 +6,17 @@ import QuestionForm from './components/QuestionForm.jsx'
 import ResultsTable from './components/ResultsTable.jsx'
 import SqlViewer from './components/SqlViewer.jsx'
 import Visualization from './components/Visualization.jsx'
-import { postQuery } from './services/api.js'
+import { SessionExpiredError, postQuery } from './services/api.js'
 
 // Statuses that mean "try again shortly" are shown as a calm warning, not as a failure.
 // status null = the backend could not be reached or the request timed out.
 const TEMPORARY_STATUSES = new Set([null, 429, 503, 504])
 
-export default function App() {
+/**
+ * The DataPilot workspace, shown by AccessGate only to a signed-in demo user.
+ * onLogout: the Log out button. onSessionExpired: a question was refused with 401.
+ */
+export default function App({ onLogout = () => {}, onSessionExpired = () => {} }) {
   const [question, setQuestion] = useState('')
   const [validationError, setValidationError] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -40,6 +44,11 @@ export default function App() {
     try {
       setResult(await postQuery(trimmed))
     } catch (err) {
+      // Only a 401 ends the session; rate limits, timeouts and query errors are shown as before.
+      if (err instanceof SessionExpiredError) {
+        onSessionExpired()
+        return
+      }
       setError({
         title: err.title || 'Unexpected error',
         message: err.title ? err.message : 'Something went wrong. Please try again.',
@@ -69,7 +78,12 @@ export default function App() {
               <p className="brand-tagline">AI Business Data Analyst</p>
             </div>
           </div>
-          <p className="pipeline-pill">Natural language → SQL → business insight</p>
+          <div className="topbar-actions">
+            <p className="pipeline-pill">Natural language → SQL → business insight</p>
+            <button type="button" className="logout-button" onClick={onLogout}>
+              Log out
+            </button>
+          </div>
         </div>
       </header>
 

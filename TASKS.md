@@ -231,7 +231,7 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 ## Phase 18 — Private demo access
 
 - [x] Backend login gate: `/auth/login`, `/auth/session`, `/auth/logout`, signed session tokens, per-client login limit, `/query` requires a session (committed locally, not deployed)
-- [ ] Frontend login page, token handling and logout
+- [x] Frontend login page, token handling and logout (committed locally, not deployed)
 - [ ] Documentation, Render secrets and deployment of backend and frontend together
 - [ ] Production verification of the login gate
 
