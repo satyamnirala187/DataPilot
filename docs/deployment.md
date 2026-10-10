@@ -43,7 +43,7 @@ Environment variables (names only; enter values in the Render dashboard):
 
 | Name | Required | Value |
 |---|---|---|
-| `READONLY_DATABASE_URL` | yes | read-only role via the session pooler, ending in `?sslmode=require` |
+| `READONLY_DATABASE_URL` | yes | read-only role via the session pooler (a secret). The backend requires TLS whatever the URL says, so `?sslmode=require` is optional |
 | `GEMINI_API_KEY` | yes | Gemini API key |
 | `CORS_ALLOWED_ORIGINS` | yes | JSON list, see [CORS](#cors) |
 | `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS` | no | default 5 questions per 60 s per client |

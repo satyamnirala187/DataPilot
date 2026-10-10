@@ -12,7 +12,7 @@ from pathlib import Path
 import psycopg
 from pydantic import ValidationError
 
-from apply_schema import DatabaseSettings
+from apply_schema import DatabaseSettings, connect
 
 SQL_FILE = Path(__file__).resolve().parent / "api_roles.sql"
 TABLES = ("customers", "categories", "products", "orders", "order_items", "payments")
@@ -37,7 +37,7 @@ def main() -> None:
         raise SystemExit("DATABASE_URL is not set in .env. Nothing was changed.") from None
 
     try:
-        with psycopg.connect(admin_url, connect_timeout=10) as conn:
+        with connect(admin_url, connect_timeout=10) as conn:
             with conn.transaction():
                 conn.execute(SQL_FILE.read_text(encoding="utf-8"))
             left = remaining_grants(conn)

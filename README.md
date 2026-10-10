@@ -254,7 +254,7 @@ Backend (in the project-root `.env` locally, or in the Render dashboard):
 
 | Variable | Purpose |
 |---|---|
-| `READONLY_DATABASE_URL` | connection for the read-only role; used by the running app for every query |
+| `READONLY_DATABASE_URL` | connection for the read-only role; used by the running app for every query, always over TLS |
 | `GEMINI_API_KEY` | Gemini API key |
 | `CORS_ALLOWED_ORIGINS` | optional; JSON list of browser origins allowed to call the API (defaults to the local Vite origins) |
 | `TRUST_CF_CONNECTING_IP` | optional; `true` only behind Cloudflare, as on Render, so rate limiting uses the real client IP |

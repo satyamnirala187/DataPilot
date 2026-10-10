@@ -119,7 +119,7 @@ All backend code is in `backend/app/`.
 | `query_service.py` | The pipeline, `run_business_query`: generate → validate → execute → select visualization → optional insight. Defines `QueryResponse` and turns step failures into `QueryServiceError` kinds |
 | `nl_to_sql.py` | The only code that asks Gemini for SQL: schema context, business definitions, SQL rules, untrusted-input rules, `generate_sql`, and `SQLGenerationError` |
 | `sql_validator.py` | `validate_sql`: the SQLGlot safety checks and `LIMIT` enforcement. No network or database access, so it is tested on its own |
-| `db_executor.py` | `execute_query`: runs approved SQL as the read-only role, with timeout and row cap; `to_json_value` converts PostgreSQL types; `QueryExecutionError` hides connection details |
+| `db_executor.py` | `execute_query`: runs approved SQL as the read-only role over TLS (always `sslmode=require` or stricter), with timeout and row and size caps; `to_json_value` converts PostgreSQL types; `QueryExecutionError` hides connection details |
 | `chart_selector.py` | `select_visualization` and the `Visualization` model (`type`, `x_key`, `y_key`) |
 | `insight_service.py` | `generate_insight`: the optional summary prompt, a 15-second timeout, output length checks, and `InsightError` |
 | `middleware.py` | Plain ASGI middleware: `RequestContext` (request ID and summary log line), `LimitRequestBody` (16 KB), `CatchUnexpectedErrors` (safe 500s that still carry CORS headers), `SecurityHeaders`, and `error_response` |

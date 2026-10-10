@@ -15,7 +15,7 @@ from urllib.parse import urlsplit, urlunsplit
 import psycopg
 from psycopg import sql
 
-from apply_schema import ENV_FILE, DatabaseSettings
+from apply_schema import ENV_FILE, DatabaseSettings, connect
 
 ROLE = "datapilot_readonly"
 ROLE_FILE = Path(__file__).resolve().parent / "readonly_role.sql"
@@ -44,7 +44,7 @@ def main() -> None:
     admin_url = DatabaseSettings().database_url
     password = secrets.token_urlsafe(32)  # URL-safe characters only, so no escaping is needed
     try:
-        with psycopg.connect(admin_url) as conn, conn.transaction():
+        with connect(admin_url) as conn, conn.transaction():
             conn.execute(ROLE_FILE.read_text(encoding="utf-8"))
             conn.execute(sql.SQL("ALTER ROLE {} PASSWORD {}").format(sql.Identifier(ROLE), sql.Literal(password)))
     except psycopg.Error as error:

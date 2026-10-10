@@ -15,6 +15,7 @@ import psycopg
 import pytest
 
 from app.config import settings
+from app.db_executor import tls_sslmode
 from app.sql_validator import ALLOWED_TABLES
 
 TABLES = sorted(ALLOWED_TABLES)
@@ -38,7 +39,8 @@ needs_database = pytest.mark.skipif(settings.readonly_database_url is None,
 @pytest.fixture(scope="module")
 def catalog():
     try:
-        conn = psycopg.connect(settings.readonly_database_url.get_secret_value(), connect_timeout=5)
+        url = settings.readonly_database_url.get_secret_value()
+        conn = psycopg.connect(url, connect_timeout=5, sslmode=tls_sslmode(url))
     except psycopg.Error as error:
         pytest.fail(f"Could not connect as the read-only role ({type(error).__name__})", pytrace=False)
     conn.read_only = True

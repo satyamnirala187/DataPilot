@@ -2,7 +2,7 @@
 
 This module only executes. It does not validate SQL (that is app.sql_validator's job) and
 contains no business logic. Every query runs:
-  - as the datapilot_readonly role (READONLY_DATABASE_URL),
+  - as the datapilot_readonly role (READONLY_DATABASE_URL), over TLS,
   - inside a read-only transaction that is always rolled back,
   - with a short statement timeout,
   - returning at most max_result_rows rows, and at most max_result_bytes of JSON.
@@ -23,12 +23,18 @@ from typing import Any
 from uuid import UUID
 
 import psycopg
+from psycopg.conninfo import conninfo_to_dict
 
 from app.config import settings
 
 # Applies to each psycopg connection attempt separately (one attempt per address the host
 # resolves to), so it bounds every attempt, not the total time spent connecting.
 CONNECT_TIMEOUT_SECONDS = 5
+
+# Every connection must be encrypted, whatever READONLY_DATABASE_URL says. libpq's default
+# ("prefer") and the modes "disable" and "allow" can fall back to plain text, so they are replaced
+# by "require". Stricter modes that also verify the server's certificate are kept as they are.
+TLS_SSLMODES = ("require", "verify-ca", "verify-full")
 
 
 @dataclass
@@ -59,7 +65,7 @@ def execute_query(sql: str, *, database_url: str | None = None, timeout_ms: int 
     max_bytes = max_bytes or settings.max_result_bytes
 
     try:
-        conn = psycopg.connect(url, connect_timeout=CONNECT_TIMEOUT_SECONDS)
+        conn = psycopg.connect(url, connect_timeout=CONNECT_TIMEOUT_SECONDS, sslmode=tls_sslmode(url))
     except psycopg.Error:
         # Connection errors can include host and user names, so none of it is passed on.
         raise QueryExecutionError("unavailable", "Could not connect to the database.") from None
@@ -127,6 +133,13 @@ def json_size(value: Any, limit: int) -> int:
                 break
         return total
     return len(json.dumps(value))  # numbers, booleans and None
+
+
+def tls_sslmode(url: str) -> str:
+    """The sslmode to connect with: the URL's own if it requires TLS, otherwise "require".
+    Passed to psycopg.connect as a keyword, which overrides the URL without rewriting it."""
+    mode = conninfo_to_dict(url).get("sslmode")  # raises psycopg.ProgrammingError if malformed
+    return mode if mode in TLS_SSLMODES else "require"
 
 
 def _readonly_url() -> str:

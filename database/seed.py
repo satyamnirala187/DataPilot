@@ -18,7 +18,7 @@ from typing import NamedTuple
 import psycopg
 from faker import Faker
 
-from apply_schema import DatabaseSettings
+from apply_schema import DatabaseSettings, connect
 
 # --- Reproducibility and size ----------------------------------------------------------
 
@@ -398,7 +398,7 @@ def main() -> None:
 
     settings = DatabaseSettings()
     try:
-        with psycopg.connect(settings.database_url) as conn:
+        with connect(settings.database_url) as conn:
             load(conn, data)
     except psycopg.Error as error:
         # Never show the raw message: connection errors can include host and user names.
