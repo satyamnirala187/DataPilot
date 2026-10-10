@@ -222,7 +222,7 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Enforce TLS for PostgreSQL connections and verify production configuration
   - TLS (sslmode=require or stronger) enforced in code for the app and the setup scripts, and tested against Supabase; owner verified the TLS-enforcing commit is live on Render with READONLY_DATABASE_URL present. Not yet observed on a production query: the one attempted failed at Gemini before reaching the database.
 - [ ] Add frontend production security headers; finalise CSP after UI V2 assets are known
-- [ ] Add the project license and final legal/non-affiliation wording
+- [x] Add the project license and final legal/non-affiliation wording
 - [ ] Review optional hardening: production API docs, backend HSTS, metadata-disclosure functions and production dependency split
 - [ ] Run the final Phase 17 security regression and document residual risks
 - [ ] Commit Phase 17 security hardening

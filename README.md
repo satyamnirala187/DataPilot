@@ -355,3 +355,15 @@ debugging.
 ## Author
 
 **Satyam Nirala**: [github.com/satyamnirala187](https://github.com/satyamnirala187)
+
+## License and Disclaimer
+
+DataPilot is released under the [MIT License](LICENSE).
+
+It is an independent portfolio and academic demonstration project. The e-commerce store and all of
+its data are fictional, generated with Faker for demonstration and testing; no real customer or
+business data is included.
+
+DataPilot is not affiliated with, endorsed by or sponsored by Google (including Gemini), Supabase,
+Render, Vercel, OpenAI, Anthropic or any other third-party provider it mentions. Product names are
+trademarks of their respective owners and are used only to describe the technology DataPilot uses.
