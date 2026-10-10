@@ -187,8 +187,7 @@ current `products.price` or `products.cost` changes later. Profit never uses `pr
 `SELECT` on the six tables and nothing else, no inherited privileges, a connection limit, and every
 session read-only by default with a 5-second statement timeout.
 
-**Application data (History and Saved Reports, in progress, not live in production yet):** DataPilot's
-own data lives apart from the business data, in schema `datapilot` (`database/app_schema.sql`):
+**Application data (History and Saved Reports, live in production):** DataPilot's own data lives apart from the business data, in schema `datapilot` (`database/app_schema.sql`):
 
 | Table | Holds |
 |---|---|
@@ -202,7 +201,7 @@ access to schema `datapilot`. `schema.sql` never touches it, so reseeding the bu
 every analysis and saved report. The schema and role exist in the hosted database and are verified
 by live tests.
 
-**Automatic History recording (implemented, not yet deployed):** after `run_business_query` has
+**Automatic History recording:** after `run_business_query` has
 returned a successful answer, the `/query` endpoint stores it with `history_store.record_analysis`
 and returns the new row's id as `analysis_id`. Only complete answers are stored, including those
 with no rows or no insight; any request that fails (login, validation, rate limits, Gemini,
@@ -212,7 +211,7 @@ demo login is account `demo` (`auth.DEMO_ACCOUNT_ID`), so History survives logou
 History is secondary to the answer: if storing fails or `APP_DATABASE_URL` is not set, the full
 answer is still returned with HTTP 200 and `analysis_id: null`.
 
-**History and Saved Reports API (implemented and tested locally, not yet deployed):** every endpoint
+**History and Saved Reports API:** every endpoint
 needs a demo session (checked first), then has its own limit of 60 requests per minute per client,
 separate from the `/query` limits and the daily cap. Everything is read from the stored snapshots:
 no endpoint calls Gemini, regenerates SQL, runs a stored query or uses the daily cap.
@@ -232,8 +231,10 @@ that belongs to another account), 409 `already_saved` (one report per analysis),
 `APP_DATABASE_URL` is not set: an empty list would wrongly say there is no History. There is no
 delete or edit in V1: `datapilot_app` has only `SELECT` and `INSERT`. Timestamps are ISO 8601 in UTC.
 
-`APP_DATABASE_URL` is not yet set on Render, so production neither stores History nor serves this
-API yet, and there is no History or Saved Reports screen yet.
+**Production status:** live since Phase 19, with `APP_DATABASE_URL` set on Render; production
+storage and every endpoint were verified after the rollout. The one shared demo login is one account,
+so every demo visitor sees the same History and Saved Reports. There is no History or Saved Reports
+screen yet: the current frontend ignores `analysis_id` until UI V2.
 
 ## 7. Business Semantics
 

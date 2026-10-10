@@ -197,7 +197,10 @@ the previous version (with its rate limit and daily cap) returns as a whole. If 
 ## History and Saved Reports
 
 Phase 19 stores every successful answer as History and lets users save one as a report
-(`docs/architecture.md`, "Application data"). In production this needs one more secret:
+(`docs/architecture.md`, "Application data"). This is live in production. Reopening History or a
+saved report reads the stored snapshot, with no Gemini call or SQL rerun; saved reports cannot be
+edited or deleted in V1. The one shared demo login is one account, so all demo visitors share the
+same History and Saved Reports. In production this needs one more secret:
 
 **`APP_DATABASE_URL`** is the connection for the role `datapilot_app`. That role can only read and
 add rows in `datapilot.analyses` and `datapilot.saved_reports`: no access to the business tables, no
@@ -234,7 +237,8 @@ until you do.
 
 ### Production verification plan
 
-Not run yet; to be done after the rollout. Spend Gemini quota on one question only.
+Run once after the Phase 19 rollout, and every check passed (see `TASKS.md`). Use it again after a
+future redeploy if needed. Spend Gemini quota on one question only.
 
 **A. Without Gemini or credentials** (`curl` from any machine):
 

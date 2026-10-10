@@ -240,13 +240,13 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 ## Phase 19 — History & Saved Reports
 
 - [x] Database persistence foundation
-  - Schema `datapilot` (tables `analyses`, `saved_reports`) and writer role `datapilot_app` applied to Supabase with `create_app_role.py`; `APP_DATABASE_URL` in local `.env` only. Catalog privileges verified by the live tests: `datapilot_app` has SELECT + INSERT only and nothing on the business tables; `datapilot_readonly`, PUBLIC, anon, authenticated and service_role have no access to the schema. A transactional writer test (insert, read back, UPDATE/DELETE/TRUNCATE and business-table access refused, over TLS) passed and was rolled back, leaving no rows.
+  - Schema `datapilot` (tables `analyses`, `saved_reports`) and writer role `datapilot_app` applied to Supabase with `create_app_role.py`; `APP_DATABASE_URL` is never in Git. Catalog privileges verified by the live tests: `datapilot_app` has SELECT + INSERT only and nothing on the business tables; `datapilot_readonly`, PUBLIC, anon, authenticated and service_role have no access to the schema. A transactional writer test (insert, read back, UPDATE/DELETE/TRUNCATE and business-table access refused, over TLS) passed and was rolled back, leaving no rows.
 - [x] Automatic query history recording
-  - Every successful `/query` answer is snapshotted to `datapilot.analyses` (account `demo`) and returned with its `analysis_id`. History failures are non-fatal: the full answer is still returned with `analysis_id: null`. Not deployed yet: `APP_DATABASE_URL` is only in the local `.env`, not on Render.
+  - Every successful `/query` answer is snapshotted to `datapilot.analyses` (account `demo`) and returned with its `analysis_id`. History failures are non-fatal: the full answer is still returned with `analysis_id: null`.
 - [x] History and Saved Reports API
-  - Five authenticated, account-scoped endpoints: `GET /history`, `GET /history/{id}`, `POST /saved-reports`, `GET /saved-reports`, `GET /saved-reports/{id}`. Reads use the stored snapshots only (no Gemini, no SQL rerun); a Saved Report saves an existing analysis by `analysis_id` with a title. No delete or edit endpoint in V1. Not production-live: `APP_DATABASE_URL` is still not set on Render.
-- [ ] Production deployment and verification
-  - Deployment prepared: `render.yaml` declares `APP_DATABASE_URL` (secret, no value in Git); `docs/deployment.md` has the rollout, verification plan and rollback. Still to do: the owner adds `APP_DATABASE_URL` on Render, then push, deploy and verify.
+  - Five authenticated, account-scoped endpoints: `GET /history`, `GET /history/{id}`, `POST /saved-reports`, `GET /saved-reports`, `GET /saved-reports/{id}`. Reads use the stored snapshots only (no Gemini, no SQL rerun); a Saved Report saves an existing analysis by `analysis_id` with a title. No delete or edit endpoint in V1.
+- [x] Production deployment and verification
+  - `APP_DATABASE_URL` configured on Render as a secret (the writer credential was rotated before production verification) and the Phase 19 backend deployed successfully. Gemini-free checks: `/health` 200, unauthenticated `/history` and `/saved-reports` 401, `/docs` and `/openapi.json` 404. One controlled query ("What is our total revenue?", ₹21,304,631.99) created exactly one History snapshot holding that value. Verified in production: History list and detail; Saved Reports create (201), list and detail; duplicate save refused (409); the history entry then showed its `saved_report_id`. No benchmark or repeated Gemini production testing was performed.
 
 ---
 
