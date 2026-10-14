@@ -25,12 +25,31 @@ const TITLES_BY_STATUS = {
   504: 'Query timed out',
 }
 
+// History and Saved Reports wording, used when the backend sends no usable message.
+const APP_DATA_ERRORS = {
+  titles: { ...TITLES_BY_STATUS, 404: 'Not found', 409: 'Already saved' },
+  messages: {
+    ...MESSAGES_BY_STATUS,
+    400: 'This request could not be completed. Please try again.',
+    404: 'This item was not found.',
+    409: 'This analysis is already saved as a report.',
+    429: 'Too many requests. Please wait a moment and try again.',
+    503: 'History is not available right now. Please try again later.',
+  },
+}
+
+/**
+ * A failed request, safe to show: title and message are user-facing. status is the HTTP status
+ * (null when the backend was not reached or the request never left); code is the backend's error
+ * code (e.g. "already_saved"), or null.
+ */
 export class ApiError extends Error {
-  constructor(title, message, status = null) {
+  constructor(title, message, status = null, code = null) {
     super(message)
     this.name = 'ApiError'
     this.title = title
     this.status = status
+    this.code = code
   }
 }
 
@@ -160,45 +179,180 @@ export async function logout() {
   }
 }
 
-/** Send a business question to POST /query and return { question, sql, columns, rows, row_count, truncated }. */
-export async function postQuery(question) {
-  const response = await send('/query', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeader() },
-    body: JSON.stringify({ question }),
+/**
+ * A signed-in JSON request: the bearer token goes in the Authorization header (never the URL).
+ * 401 ends the session (SessionExpiredError); other failures become ApiErrors worded by errors;
+ * a success that isValid rejects is an "Unexpected response". Returns the parsed body as sent.
+ */
+async function requestJson(path, { method = 'GET', body, errors, isValid }) {
+  const headers = { ...authHeader() }
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  const response = await send(path, {
+    method,
+    headers,
+    ...(body !== undefined && { body: JSON.stringify(body) }),
   })
 
-  const body = await response.json().catch(() => null)
+  const data = await response.json().catch(() => null)
 
   if (response.status === 401) {
     clearToken()
     throw new SessionExpiredError()
   }
   if (!response.ok) {
-    throw errorFromResponse(response.status, body)
+    throw errorFromResponse(response.status, data, errors)
   }
-  if (!isQueryResult(body)) {
+  if (!isValid(data)) {
     throw new ApiError('Unexpected response', 'The API returned a response DataPilot could not read.', response.status)
   }
-  return body
+  return data
 }
 
-function errorFromResponse(status, body) {
-  const title = TITLES_BY_STATUS[status] || 'Unexpected error'
+const QUERY_ERRORS = { titles: TITLES_BY_STATUS, messages: MESSAGES_BY_STATUS }
+
+/**
+ * Send a business question to POST /query and return
+ * { question, sql, columns, rows, row_count, truncated, visualization, insight, analysis_id }.
+ */
+export async function postQuery(question) {
+  return requestJson('/query', { method: 'POST', body: { question }, errors: QUERY_ERRORS, isValid: isQueryResult })
+}
+
+// --- History and Saved Reports ---------------------------------------------------------------
+// Stored answers of the signed-in account. Reading them never calls the AI or reruns a query.
+// A stored analysis has the same fields as a /query answer (plus id and created_at), so the same
+// components can show both.
+
+const MAX_LIST_LIMIT = 100
+const MAX_TITLE_LENGTH = 120
+
+/** GET /history: the account's analyses, newest first, as { items: [summary, ...] }. */
+export async function getHistory(limit = 50) {
+  return requestJson(`/history?limit=${checkedLimit(limit)}`, {
+    errors: APP_DATA_ERRORS,
+    isValid: (data) => isList(data, isAnalysisSummary),
+  })
+}
+
+/** GET /history/{id}: one stored analysis, with saved_report ({ id, title } or null). */
+export async function getAnalysis(analysisId) {
+  return requestJson(`/history/${pathId(analysisId)}`, {
+    errors: APP_DATA_ERRORS,
+    isValid: (data) => isStoredAnalysis(data) && (data.saved_report === null || isReportRef(data.saved_report)),
+  })
+}
+
+/**
+ * POST /saved-reports: save one analysis under a title (trimmed, 1-120 characters). Returns
+ * { id, analysis_id, title, saved_at }. A second save of the same analysis is an ApiError with
+ * code "already_saved"; how to show it is up to the caller.
+ */
+export async function saveReport(analysisId, title) {
+  const body = { analysis_id: checkedId(analysisId), title: checkedTitle(title) }
+  return requestJson('/saved-reports', { method: 'POST', body, errors: APP_DATA_ERRORS, isValid: isSavedReport })
+}
+
+/** GET /saved-reports: the account's saved reports, most recently saved first, as { items: [...] }. */
+export async function getSavedReports(limit = 50) {
+  return requestJson(`/saved-reports?limit=${checkedLimit(limit)}`, {
+    errors: APP_DATA_ERRORS,
+    isValid: (data) => isList(data, isSavedReportSummary),
+  })
+}
+
+/** GET /saved-reports/{id}: one saved report, { id, title, saved_at, analysis: stored analysis }. */
+export async function getSavedReport(reportId) {
+  return requestJson(`/saved-reports/${pathId(reportId)}`, {
+    errors: APP_DATA_ERRORS,
+    isValid: (data) => isObject(data) && hasStrings(data, ['id', 'title', 'saved_at']) && isStoredAnalysis(data.analysis),
+  })
+}
+
+// Caller mistakes are refused before any request is sent. The backend still checks everything.
+function invalidInput(message) {
+  return new ApiError('Invalid request', message, null, 'invalid_request')
+}
+
+function checkedLimit(limit) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIST_LIMIT) {
+    throw invalidInput(`The list limit must be a whole number from 1 to ${MAX_LIST_LIMIT}.`)
+  }
+  return limit
+}
+
+function checkedId(id) {
+  if (typeof id !== 'string' || id.trim() === '') throw invalidInput('This item could not be identified.')
+  return id
+}
+
+// encodeURIComponent leaves "." alone, and the URL parser would resolve "." or ".." to another path.
+function pathId(id) {
+  const encoded = encodeURIComponent(checkedId(id))
+  if (encoded === '.' || encoded === '..') throw invalidInput('This item could not be identified.')
+  return encoded
+}
+
+function checkedTitle(title) {
+  const trimmed = typeof title === 'string' ? title.trim() : ''
+  // Counted in characters (code points), as the backend counts them, not UTF-16 units.
+  const length = [...trimmed].length
+  if (length < 1 || length > MAX_TITLE_LENGTH) {
+    throw invalidInput(`Report titles must be 1 to ${MAX_TITLE_LENGTH} characters.`)
+  }
+  return trimmed
+}
+
+function errorFromResponse(status, body, { titles, messages }) {
+  const title = titles[status] || 'Unexpected error'
   const error = body?.error
   // The backend's error messages are written for end users. Request-shape errors are not,
   // and anything that doesn't match the documented shape (e.g. a proxy's HTML page) is ignored.
   const usable = typeof error?.message === 'string' && error.message.length > 0 && error.code !== 'invalid_request'
-  const message = usable ? error.message : MESSAGES_BY_STATUS[status] || DEFAULT_MESSAGE
-  return new ApiError(title, message, status)
+  const message = usable ? error.message : messages[status] || DEFAULT_MESSAGE
+  // Only a plain code word is kept, never other text from the body.
+  const code = typeof error?.code === 'string' && /^[a-z0-9_]{1,64}$/.test(error.code) ? error.code : null
+  return new ApiError(title, message, status, code)
+}
+
+function isObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function hasStrings(value, keys) {
+  return keys.every((key) => typeof value[key] === 'string')
 }
 
 function isQueryResult(body) {
+  return isObject(body) && typeof body.sql === 'string' && Array.isArray(body.columns) && Array.isArray(body.rows)
+}
+
+function isStoredAnalysis(body) {
   return (
-    body !== null &&
-    typeof body === 'object' &&
-    typeof body.sql === 'string' &&
-    Array.isArray(body.columns) &&
-    Array.isArray(body.rows)
+    isQueryResult(body) &&
+    hasStrings(body, ['id', 'question', 'created_at']) &&
+    Number.isInteger(body.row_count) &&
+    typeof body.truncated === 'boolean' &&
+    isObject(body.visualization) &&
+    (body.insight === null || typeof body.insight === 'string')
   )
+}
+
+function isList(body, isItem) {
+  return isObject(body) && Array.isArray(body.items) && body.items.every(isItem)
+}
+
+function isAnalysisSummary(item) {
+  return isObject(item) && hasStrings(item, ['id', 'question', 'created_at'])
+}
+
+function isSavedReportSummary(item) {
+  return isObject(item) && hasStrings(item, ['id', 'analysis_id', 'title', 'question', 'saved_at'])
+}
+
+function isReportRef(value) {
+  return isObject(value) && hasStrings(value, ['id', 'title'])
+}
+
+function isSavedReport(body) {
+  return isObject(body) && hasStrings(body, ['id', 'analysis_id', 'title', 'saved_at'])
 }
