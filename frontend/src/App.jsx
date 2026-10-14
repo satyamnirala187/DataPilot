@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import AppShell from './components/AppShell.jsx'
 import ErrorMessage from './components/ErrorMessage.jsx'
 import Icon from './components/Icon.jsx'
 import InsightCard from './components/InsightCard.jsx'
@@ -15,8 +16,15 @@ const TEMPORARY_STATUSES = new Set([null, 429, 503, 504])
 /**
  * The DataPilot workspace, shown by AccessGate only to a signed-in demo user.
  * onLogout: the Log out button. onSessionExpired: a question was refused with 401.
+ *
+ * view is the signed-in page: ask | history | saved. The question, answer and error live here, not
+ * in the Ask page, so moving between pages never clears an answer or asks again.
  */
 export default function App({ onLogout = () => {}, onSessionExpired = () => {} }) {
+  const [view, setView] = useState('ask')
+  // Bumped by the top bar's "Ask another question…": once the Ask page is shown, focus the question.
+  const [focusRequest, setFocusRequest] = useState(0)
+  const questionRef = useRef(null)
   const [question, setQuestion] = useState('')
   const [validationError, setValidationError] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -65,33 +73,48 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
     if (validationError) setValidationError(null)
   }
 
-  return (
-    <div className="app">
-      <header className="topbar">
-        <div className="container topbar-inner">
-          <div className="brand">
-            <span className="brand-mark">
-              <Icon name="logo" size={20} />
-            </span>
-            <div>
-              <h1>DataPilot</h1>
-              <p className="brand-tagline">AI Business Data Analyst</p>
-            </div>
-          </div>
-          <div className="topbar-actions">
-            <p className="pipeline-pill">Natural language → SQL → business insight</p>
-            <button type="button" className="logout-button" onClick={onLogout}>
-              Log out
-            </button>
-          </div>
-        </div>
-      </header>
+  function handleAskAnother() {
+    setView('ask')
+    setFocusRequest((count) => count + 1)
+  }
 
-      <main className="container main">
-        <QuestionForm
+  useEffect(() => {
+    if (focusRequest) questionRef.current?.focus()
+  }, [focusRequest])
+
+  return (
+    <AppShell view={view} onNavigate={setView} onAskAnother={handleAskAnother} onLogout={onLogout}>
+      {view === 'history' && <ViewPlaceholder title="History" text="History will appear here." />}
+      {view === 'saved' && <ViewPlaceholder title="Saved Reports" text="Saved reports will appear here." />}
+      {view === 'ask' && (
+        <AskPage
           question={question}
           onQuestionChange={handleQuestionChange}
           onSubmit={handleSubmit}
+          questionRef={questionRef}
+          loading={loading}
+          validationError={validationError}
+          result={result}
+          error={error}
+        />
+      )}
+    </AppShell>
+  )
+}
+
+/**
+ * The Ask page: still the pre-V2 question form and answer, unchanged, inside the V2 shell.
+ * It is redesigned in a later batch.
+ */
+function AskPage({ question, onQuestionChange, onSubmit, questionRef, loading, validationError, result, error }) {
+  return (
+    <div className="dp-legacy-page">
+      <div className="container main">
+        <QuestionForm
+          question={question}
+          onQuestionChange={onQuestionChange}
+          onSubmit={onSubmit}
+          inputRef={questionRef}
           loading={loading}
           validationError={validationError}
         />
@@ -132,7 +155,7 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
             </>
           )}
         </section>
-      </main>
+      </div>
 
       <footer className="container">
         <p className="footer">
@@ -140,6 +163,16 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
           Read-only by design: every generated query is validated and runs with a read-only database role.
         </p>
       </footer>
+    </div>
+  )
+}
+
+/** A temporary stand-in for a page that is built in a later batch: a heading and one line. */
+function ViewPlaceholder({ title, text }) {
+  return (
+    <div className="dp-placeholder">
+      <h1>{title}</h1>
+      <p>{text}</p>
     </div>
   )
 }

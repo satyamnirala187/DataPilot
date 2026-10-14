@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.jsx'
@@ -38,11 +38,9 @@ afterEach(() => {
 })
 
 describe('DataPilot page', () => {
-  it('renders the header, question field and Analyze button', () => {
+  it('renders the question field and Analyze button inside the app shell', () => {
     render(<App />)
-    expect(screen.getByRole('heading', { level: 1, name: 'DataPilot' })).toBeInTheDocument()
-    expect(screen.getByText('AI Business Data Analyst')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 2, name: 'Ask a business question' })).toBeInTheDocument()
+    expect(within(screen.getByRole('main')).getByRole('heading', { level: 2, name: 'Ask a business question' })).toBeInTheDocument()
     expect(screen.getByLabelText('Your question')).toHaveValue('')
     expect(screen.getByRole('button', { name: 'Analyze' })).toBeEnabled()
   })
@@ -256,5 +254,135 @@ describe('DataPilot page', () => {
     await user.click(screen.getByRole('button', { name: 'Analyze' }))
     await screen.findByRole('alert')
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+})
+
+describe('app shell', () => {
+  function nav() {
+    return screen.getByRole('navigation', { name: 'Main menu' })
+  }
+
+  function navButton(name) {
+    return within(nav()).getByRole('button', { name })
+  }
+
+  it('opens on Ask DataPilot with the logo, profile and workspace', () => {
+    render(<App />)
+    expect(screen.getByRole('img', { name: 'DataPilot' })).toBeInTheDocument()
+    expect(navButton('Ask DataPilot')).toHaveAttribute('aria-current', 'page')
+    expect(navButton('History')).not.toHaveAttribute('aria-current')
+    expect(navButton('Saved Reports')).not.toHaveAttribute('aria-current')
+    expect(screen.getByLabelText('Your question')).toBeInTheDocument()
+
+    expect(screen.getByText('Saty')).toBeInTheDocument()
+    expect(screen.getByText('Sales')).toBeInTheDocument()
+    const header = screen.getByRole('banner')
+    expect(within(header).getByText('Stark Industries')).toBeInTheDocument()
+    expect(within(header).getByText('Sales workspace')).toBeInTheDocument()
+  })
+
+  it('has one navigation, one header and one main landmark, and named buttons', () => {
+    render(<App />)
+    expect(screen.getAllByRole('navigation')).toHaveLength(1)
+    expect(screen.getAllByRole('banner')).toHaveLength(1)
+    expect(screen.getAllByRole('main')).toHaveLength(1)
+    for (const button of screen.getAllByRole('button')) expect(button).toHaveAccessibleName()
+    expect(within(nav()).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Ask DataPilot',
+      'History',
+      'Saved Reports',
+    ])
+  })
+
+  it('shows the profile as text, not as a control', () => {
+    render(<App />)
+    expect(screen.getByText('Saty').closest('button, a, [role="button"], [tabindex]')).toBeNull()
+    expect(screen.queryByRole('button', { name: /saty|profile|account|settings/i })).not.toBeInTheDocument()
+  })
+
+  it('shows no Saved Reports count before real data is connected', () => {
+    render(<App />)
+    expect(navButton('Saved Reports').textContent).toBe('Saved Reports')
+    expect(nav().textContent).not.toMatch(/\d/)
+  })
+
+  it('switches to the History and Saved Reports placeholders and back, without any request', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(navButton('History'))
+    expect(screen.getByRole('heading', { level: 1, name: 'History' })).toBeInTheDocument()
+    expect(screen.getByText('History will appear here.')).toBeInTheDocument()
+    expect(navButton('History')).toHaveAttribute('aria-current', 'page')
+    expect(navButton('Ask DataPilot')).not.toHaveAttribute('aria-current')
+    expect(screen.queryByLabelText('Your question')).not.toBeInTheDocument()
+
+    await user.click(navButton('Saved Reports'))
+    expect(screen.getByRole('heading', { level: 1, name: 'Saved Reports' })).toBeInTheDocument()
+    expect(screen.getByText('Saved reports will appear here.')).toBeInTheDocument()
+    expect(navButton('Saved Reports')).toHaveAttribute('aria-current', 'page')
+
+    await user.click(navButton('Ask DataPilot'))
+    expect(screen.getByLabelText('Your question')).toBeInTheDocument()
+    expect(navButton('Ask DataPilot')).toHaveAttribute('aria-current', 'page')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps the answer and the typed question when moving between pages, without asking again', async () => {
+    fetchMock.mockReturnValue(jsonResponse(200, SUCCESS))
+    const user = userEvent.setup()
+    render(<App />)
+    await ask(user, 'What are the top 2 categories by revenue?')
+    await screen.findByRole('heading', { name: 'Answer' })
+    await user.type(screen.getByLabelText('Your question'), ' And by city?')
+
+    await user.click(navButton('History'))
+    await user.click(navButton('Saved Reports'))
+    await user.click(navButton('Ask DataPilot'))
+
+    expect(screen.getByRole('heading', { name: 'Answer' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Electronics' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Your question')).toHaveValue('What are the top 2 categories by revenue? And by city?')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets a question that is still running finish while another page is open', async () => {
+    let finish
+    fetchMock.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    const user = userEvent.setup()
+    render(<App />)
+    await ask(user, 'What are the top 2 categories by revenue?')
+    await user.click(navButton('History'))
+    finish(new Response(JSON.stringify(SUCCESS), { status: 200 }))
+    await user.click(navButton('Ask DataPilot'))
+    expect(await screen.findByRole('heading', { name: 'Answer' })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('"Ask another question…" opens the Ask page and focuses the question', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const askAnother = within(screen.getByRole('banner')).getByRole('button', { name: 'Ask another question…' })
+
+    await user.click(navButton('Saved Reports'))
+    await user.click(askAnother)
+    expect(navButton('Ask DataPilot')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByLabelText('Your question')).toHaveFocus()
+
+    await user.click(screen.getByRole('button', { name: 'Analyze' }))
+    await user.click(askAnother)
+    expect(screen.getByLabelText('Your question')).toHaveFocus()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('Log out calls onLogout exactly once and makes no request itself', async () => {
+    const onLogout = vi.fn()
+    const user = userEvent.setup()
+    render(<App onLogout={onLogout} />)
+    const logout = screen.getByRole('button', { name: 'Log out' })
+    expect(logout).toHaveAttribute('type', 'button')
+    await user.click(logout)
+    expect(onLogout).toHaveBeenCalledTimes(1)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

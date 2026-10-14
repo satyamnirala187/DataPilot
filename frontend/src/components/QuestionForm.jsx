@@ -8,7 +8,7 @@ const EXAMPLE_QUESTIONS = [
 const MAX_QUESTION_LENGTH = 500
 
 /** The main workspace: the question box, the Analyze button and the example questions. */
-export default function QuestionForm({ question, onQuestionChange, onSubmit, loading, validationError }) {
+export default function QuestionForm({ question, onQuestionChange, onSubmit, loading, validationError, inputRef }) {
   function handleSubmit(event) {
     event.preventDefault()
     onSubmit()
@@ -36,6 +36,7 @@ export default function QuestionForm({ question, onQuestionChange, onSubmit, loa
         </label>
         <textarea
           id="question"
+          ref={inputRef}
           name="question"
           rows={3}
           maxLength={MAX_QUESTION_LENGTH}

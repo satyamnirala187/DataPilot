@@ -62,12 +62,18 @@ async function showResult(body) {
   return view
 }
 
+// The answer area. The app shell around it has its own image (the logo), so "no chart" is
+// checked here rather than on the whole page.
+function answer() {
+  return screen.getByRole('region', { name: 'Answer' })
+}
+
 describe('visualizations', () => {
   it('renders a KPI with a readable label and currency formatting', async () => {
     await showResult(KPI)
     expect(screen.getByRole('heading', { name: 'Total Revenue' })).toBeInTheDocument()
     expect(screen.getByText('₹21,304,631.99')).toBeInTheDocument()
-    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(within(answer()).queryByRole('img')).not.toBeInTheDocument()
   })
 
   it('formats a count KPI without a currency sign', async () => {
@@ -110,7 +116,7 @@ describe('visualizations', () => {
 
   it('shows no chart for a table-only result', async () => {
     await showResult(TABLE_ONLY)
-    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(within(answer()).queryByRole('img')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /by/ })).not.toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Asha Rao' })).toBeInTheDocument()
   })
@@ -118,7 +124,7 @@ describe('visualizations', () => {
   it('shows no chart when the response has no visualization field', async () => {
     const { visualization: _unused, ...withoutVisualization } = BAR
     await showResult(withoutVisualization)
-    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(within(answer()).queryByRole('img')).not.toBeInTheDocument()
     expect(screen.getByRole('table')).toBeInTheDocument()
   })
 
