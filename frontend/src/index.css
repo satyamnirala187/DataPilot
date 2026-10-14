@@ -165,6 +165,11 @@
   --dp-duration-spin: 800ms; /* button spinner */
   --dp-duration-pulse: 1.4s; /* skeleton */
   --dp-placeholder-cycle: 3.6s;
+
+  /* Login only (values from the approved Login reference) */
+  --dp-login-bg: linear-gradient(180deg, #fbfcff, #f2f6ff);
+  --dp-login-card-width: clamp(400px, 38vw, 500px);
+  --dp-shadow-login: 0 1px 2px rgba(30, 60, 160, 0.06), 0 36px 80px -24px rgba(30, 70, 200, 0.32);
 }
 
 *,
@@ -1038,6 +1043,730 @@ tbody tr:last-child td {
   font-size: 0.8rem;
 }
 
+/* --- UI V2: access screens (boot loader, connection problem, login) ----------------------------
+   V2 tokens only. These screens are fully V2; the signed-in app still uses the legacy styles above. */
+
+.dp-access,
+.dp-login {
+  font-family: var(--dp-font-sans);
+  line-height: normal;
+  color: var(--dp-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.dp-button-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 11px 26px;
+  border: 0;
+  border-radius: var(--dp-radius-control);
+  background: var(--dp-primary-gradient);
+  box-shadow: var(--dp-shadow-primary);
+  color: #fff;
+  font-family: var(--dp-font-sans);
+  font-size: var(--dp-text-body-sm);
+  font-weight: var(--dp-weight-medium);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: filter var(--dp-duration-fast), transform var(--dp-duration-fast);
+}
+
+.dp-button-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.dp-button-primary:active:not(:disabled) {
+  filter: brightness(0.95);
+  transform: translateY(1px);
+}
+
+.dp-button-primary:focus-visible {
+  outline: 2px solid var(--dp-accent);
+  outline-offset: 3px;
+}
+
+.dp-button-primary:disabled {
+  cursor: default;
+  filter: saturate(0.85);
+}
+
+/* White spinner for primary buttons; reuses the legacy "spin" keyframes. */
+.dp-spinner {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin var(--dp-duration-spin) linear infinite;
+}
+
+/* Boot loader and connection problem: a calm, centred screen on the app canvas. */
+.dp-access {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 24px 16px;
+  background: var(--dp-canvas);
+}
+
+/* The approved app loader (Uiverse "l9", in brand colours): four bevelled blocks, one darker block
+   travelling round them. CSS only. */
+.dp-boot-mark {
+  width: 84px;
+  aspect-ratio: 1;
+  background:
+    linear-gradient(var(--dp-accent) 0 0) left / 50% 100% no-repeat,
+    conic-gradient(from -90deg at 32px 9.47px, var(--dp-mist) 135deg, #1a2b7a 0 270deg, #6f8fef 0);
+  background-size: 50% 50%;
+  /* The first keyframe's pose, so the still (reduced-motion) loader is not caught mid-move. */
+  background-position: 0% 0%, 0 0;
+  background-blend-mode: multiply;
+  -webkit-mask:
+    linear-gradient(to bottom right, #0000 8px, #000 0 52px, #0000 0),
+    conic-gradient(from -90deg at right 6px bottom 6px, #000 90deg, #0000 0);
+  mask:
+    linear-gradient(to bottom right, #0000 8px, #000 0 52px, #0000 0),
+    conic-gradient(from -90deg at right 6px bottom 6px, #000 90deg, #0000 0);
+  -webkit-mask-size: 50% 50%;
+  mask-size: 50% 50%;
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  box-shadow: 0 0 14px rgba(42, 89, 230, 0.28);
+  transform: perspective(1000px) rotateY(15deg);
+  animation: dp-boot-mark 1.8s infinite cubic-bezier(0.5, 0.2, 0.5, 1);
+}
+
+@keyframes dp-boot-mark {
+  0%,
+  100% {
+    background-position: 0% 0%, 0 0;
+    transform: perspective(1000px) rotateY(15deg) scale(1);
+    box-shadow: 0 0 14px rgba(42, 89, 230, 0.28);
+  }
+  25% {
+    background-position: 100% 0%, 0 0;
+  }
+  50% {
+    background-position: 100% 100%, 0 0;
+    transform: perspective(1000px) rotateY(15deg) scale(1.08);
+    box-shadow: 0 0 22px rgba(42, 89, 230, 0.38);
+  }
+  75% {
+    background-position: 0% 100%, 0 0;
+  }
+}
+
+.dp-boot-logo {
+  display: block;
+  width: auto;
+  height: 28px;
+}
+
+.dp-boot-progress {
+  position: relative;
+  width: 180px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--dp-border-field);
+}
+
+.dp-boot-progress span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 40%;
+  border-radius: 2px;
+  background: var(--dp-accent);
+  animation: dp-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes dp-indeterminate {
+  from {
+    left: -40%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+.dp-boot-text {
+  font-size: var(--dp-text-body-sm);
+  font-weight: var(--dp-weight-light);
+  color: var(--dp-text-muted);
+}
+
+.dp-access-card {
+  width: 100%;
+  max-width: 440px;
+  padding: 36px 32px;
+  border: 1px solid var(--dp-border);
+  border-radius: var(--dp-radius-card);
+  background: var(--dp-surface);
+  text-align: center;
+}
+
+.dp-access-logo {
+  display: block;
+  width: auto;
+  height: 28px;
+  margin: 0 auto;
+}
+
+.dp-access-title {
+  margin-top: 28px;
+  font-size: var(--dp-text-card-title);
+  font-weight: var(--dp-weight-medium);
+}
+
+.dp-access-text {
+  margin-top: 10px;
+  font-size: var(--dp-text-body);
+  font-weight: var(--dp-weight-light);
+  line-height: var(--dp-leading-body);
+  color: var(--dp-text-secondary);
+}
+
+.dp-access-retry {
+  margin-top: 24px;
+}
+
+/* Login: the approved composition. Headline left, card right, on a soft decorated background. */
+.dp-login {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: var(--dp-login-bg);
+}
+
+.dp-login-layout {
+  position: relative;
+  z-index: 2;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 48px;
+  padding: 0 6vw 0 7.5vw;
+}
+
+.dp-login-intro {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  padding-top: 7.5vh;
+}
+
+.dp-login-brand {
+  display: block;
+  align-self: flex-start;
+  width: auto;
+  height: 40px;
+}
+
+.dp-login-headline {
+  margin-top: 12vh;
+  font-size: var(--dp-text-login-headline);
+  font-weight: var(--dp-weight-regular);
+  line-height: var(--dp-leading-headline);
+  letter-spacing: var(--dp-tracking-headline);
+}
+
+.dp-login-headline span {
+  display: block;
+  white-space: nowrap;
+}
+
+.dp-login-headline-accent {
+  color: var(--dp-accent);
+}
+
+.dp-login-card {
+  flex: none;
+  width: var(--dp-login-card-width);
+  max-width: 100%;
+  padding: 46px 44px;
+  border: 1px solid var(--dp-border);
+  border-radius: var(--dp-radius-login);
+  background: var(--dp-surface);
+  box-shadow: var(--dp-shadow-login);
+}
+
+.dp-login-card-logo {
+  display: block;
+  width: auto;
+  height: 34px;
+  margin: 0 auto;
+}
+
+.dp-login-title {
+  margin-top: 36px;
+  text-align: center;
+  font-size: var(--dp-text-question);
+  font-weight: var(--dp-weight-regular);
+  letter-spacing: var(--dp-tracking-greeting);
+}
+
+.dp-login-subtitle {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 16.5px;
+  font-weight: var(--dp-weight-light);
+  color: var(--dp-text-muted);
+}
+
+.dp-login-notice,
+.dp-login-error {
+  padding: 12px 14px;
+  border-radius: var(--dp-radius-control);
+  font-size: 14.5px;
+  line-height: 1.4;
+}
+
+.dp-login-notice {
+  margin-top: 24px;
+  background: var(--dp-mist);
+  color: var(--dp-ink-2);
+}
+
+.dp-login-form {
+  display: flex;
+  flex-direction: column;
+  margin-top: 36px;
+}
+
+.dp-login-form label {
+  font-size: var(--dp-text-body-sm);
+  font-weight: var(--dp-weight-medium);
+}
+
+.dp-field + label {
+  margin-top: 22px;
+}
+
+.dp-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  margin-top: 9px;
+  padding: 0 16px;
+  border: 1px solid var(--dp-border-field);
+  border-radius: var(--dp-radius-control);
+  background: var(--dp-field);
+  color: var(--dp-text-muted);
+  transition: border-color var(--dp-duration-fast), background var(--dp-duration-fast),
+    box-shadow var(--dp-duration-fast);
+}
+
+.dp-field[data-invalid] {
+  border-color: var(--dp-error-field-border);
+  background: var(--dp-error-field-bg);
+}
+
+.dp-field:focus-within {
+  border-color: var(--dp-accent);
+  box-shadow: var(--dp-focus-ring);
+}
+
+.dp-field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dp-ink);
+  font: inherit;
+  font-size: 15.5px;
+}
+
+/* The field itself shows focus (above), so the input needs no outline of its own. */
+.dp-field input:focus-visible {
+  outline: none;
+}
+
+.dp-field input::placeholder {
+  color: var(--dp-placeholder);
+  opacity: 1;
+}
+
+.dp-field input:disabled {
+  color: var(--dp-text-muted);
+}
+
+.dp-field-toggle {
+  display: flex;
+  margin-right: -4px;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--dp-radius-pill);
+  background: transparent;
+  color: var(--dp-text-muted);
+}
+
+.dp-field-toggle:hover:not(:disabled) {
+  color: var(--dp-ink);
+}
+
+.dp-field-toggle:focus-visible {
+  outline: 2px solid var(--dp-accent);
+  outline-offset: 0;
+}
+
+.dp-field-toggle:disabled {
+  cursor: default;
+}
+
+.dp-login-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  background: var(--dp-error-bg);
+  color: var(--dp-error);
+}
+
+.dp-login-submit {
+  width: 100%;
+  height: 56px;
+  margin-top: 28px;
+  padding: 0 24px;
+  font-size: var(--dp-text-body-lg);
+}
+
+/* Login background. Illustration values from the approved Login reference, used only here. */
+.dp-login-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.dp-login-orb {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.dp-login-orb-1 {
+  top: -760px;
+  right: -560px;
+  width: 1200px;
+  height: 1200px;
+  background: linear-gradient(160deg, #eaf1ff, #dce8ff);
+}
+
+.dp-login-orb-2 {
+  bottom: -760px;
+  left: -420px;
+  width: 1100px;
+  height: 1100px;
+  background: linear-gradient(200deg, #e9eeff, #dde6ff);
+}
+
+.dp-login-orb-3 {
+  bottom: -470px;
+  left: -300px;
+  width: 700px;
+  height: 700px;
+  background: linear-gradient(200deg, #e7e4fb, #dce3ff);
+}
+
+.dp-login-grid {
+  position: absolute;
+  top: 10%;
+  left: 36%;
+  width: 420px;
+  height: 300px;
+  opacity: 0.5;
+  background-image: linear-gradient(#e4ebf8 1px, transparent 1px), linear-gradient(90deg, #e4ebf8 1px, transparent 1px);
+  background-size: 52px 52px;
+}
+
+.dp-login-dots {
+  position: absolute;
+  width: 340px;
+  opacity: 0.7;
+  background-image: radial-gradient(#c9d6f2 1.2px, transparent 1.3px);
+  background-size: 20px 20px;
+}
+
+.dp-login-dots-top {
+  top: 0;
+  right: 0;
+  height: 260px;
+}
+
+.dp-login-dots-bottom {
+  bottom: 0;
+  left: 0;
+  height: 240px;
+}
+
+.dp-login-curve {
+  position: absolute;
+  bottom: 18%;
+  left: 16%;
+  width: 42%;
+  overflow: visible;
+  opacity: 0.9;
+}
+
+.dp-login-board {
+  position: absolute;
+  bottom: -6%;
+  left: 8%;
+  width: 560px;
+  height: 430px;
+  opacity: 0.95;
+  transform: perspective(1500px) rotateX(48deg) rotateZ(-17deg);
+  transform-origin: left bottom;
+}
+
+.dp-login-board-base {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(190, 205, 240, 0.5);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 30px 60px -20px rgba(80, 110, 220, 0.18);
+}
+
+.dp-login-board-panel {
+  position: absolute;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.dp-login-board-line,
+.dp-login-board-bars {
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 12px 30px -12px rgba(80, 110, 220, 0.2);
+}
+
+.dp-login-board-line {
+  top: 42px;
+  left: 38px;
+  width: 250px;
+  height: 190px;
+}
+
+.dp-login-board-line svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.dp-login-board-bars {
+  top: 60px;
+  left: 310px;
+  width: 180px;
+  height: 150px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 0 34px 26px;
+}
+
+.dp-login-board-bars span {
+  width: 15px;
+  border-radius: 4px;
+}
+
+.dp-login-board-bars span:nth-child(1) {
+  height: 34px;
+  background: linear-gradient(180deg, #9ccbff, #7fb0f8);
+}
+
+.dp-login-board-bars span:nth-child(2) {
+  height: 54px;
+  background: linear-gradient(180deg, #7db3ff, #5e8ef3);
+}
+
+.dp-login-board-bars span:nth-child(3) {
+  height: 76px;
+  background: linear-gradient(180deg, #6a8dfa, #4a63ea);
+}
+
+.dp-login-board-bars span:nth-child(4) {
+  height: 100px;
+  background: linear-gradient(180deg, #6f84f2, #5148de);
+}
+
+.dp-login-board-text span {
+  position: absolute;
+  left: 24px;
+  height: 11px;
+  border-radius: 6px;
+  background: #e0e8fa;
+}
+
+.dp-login-board-text span:first-child {
+  background: #d3def8;
+}
+
+.dp-login-board-text-1 {
+  top: 240px;
+  left: 300px;
+  width: 190px;
+  height: 130px;
+}
+
+.dp-login-board-text-1 span:nth-child(1) {
+  top: 34px;
+  width: 130px;
+}
+
+.dp-login-board-text-1 span:nth-child(2) {
+  top: 60px;
+  width: 100px;
+}
+
+.dp-login-board-text-1 span:nth-child(3) {
+  top: 86px;
+  width: 70px;
+}
+
+.dp-login-board-text-2,
+.dp-login-board-text-3 {
+  border-radius: 18px;
+}
+
+.dp-login-board-text-2 span,
+.dp-login-board-text-3 span {
+  left: 18px;
+  height: 10px;
+  border-radius: 5px;
+}
+
+.dp-login-board-text-2 {
+  top: 262px;
+  left: 38px;
+  width: 120px;
+  height: 100px;
+}
+
+.dp-login-board-text-2 span:nth-child(1) {
+  top: 30px;
+  width: 80px;
+}
+
+.dp-login-board-text-2 span:nth-child(2) {
+  top: 54px;
+  width: 56px;
+}
+
+.dp-login-board-text-3 {
+  top: 276px;
+  left: 172px;
+  width: 116px;
+  height: 86px;
+}
+
+.dp-login-board-text-3 span:nth-child(1) {
+  top: 26px;
+  width: 74px;
+}
+
+.dp-login-board-text-3 span:nth-child(2) {
+  top: 48px;
+  width: 50px;
+}
+
+.dp-login-board-donut {
+  position: absolute;
+  top: 70px;
+  right: -70px;
+  width: 118px;
+  height: 118px;
+  border-radius: 50%;
+  opacity: 0.9;
+  background: conic-gradient(#8fb4f6 0 38%, #b7cef9 38% 62%, #a9a2ec 62% 100%);
+  -webkit-mask: radial-gradient(circle, transparent 0 38px, #000 39px);
+  mask: radial-gradient(circle, transparent 0 38px, #000 39px);
+}
+
+/* Narrower windows (no approved mobile design): the headline moves above the card, the card keeps
+   its look, and the illustrations that would sit behind it are removed. The approved side-by-side
+   composition still fits at 909px (the reference's own capture width), so it is kept down to there. */
+@media (max-width: 900px) {
+  .dp-login-layout {
+    flex-direction: column;
+    justify-content: center;
+    gap: 32px;
+    padding: 48px 24px;
+  }
+
+  .dp-login-intro {
+    flex: none;
+    align-self: center;
+    width: 100%;
+    max-width: 500px;
+    padding-top: 0;
+    text-align: center;
+  }
+
+  .dp-login-brand,
+  .dp-login-grid,
+  .dp-login-curve,
+  .dp-login-board {
+    display: none;
+  }
+
+  .dp-login-headline {
+    margin-top: 0;
+  }
+
+  .dp-login-headline span {
+    white-space: normal;
+  }
+
+  .dp-login-card {
+    width: 100%;
+    max-width: 500px;
+  }
+
+  /* 16px stops phones zooming into a focused field. */
+  .dp-field input {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dp-login-layout {
+    gap: 24px;
+    padding: 32px 16px;
+  }
+
+  .dp-login-card {
+    padding: 32px 22px;
+  }
+
+  .dp-login-title {
+    margin-top: 28px;
+  }
+
+  .dp-login-form {
+    margin-top: 28px;
+  }
+
+  .dp-access-card {
+    padding: 32px 22px;
+  }
+}
+
 /* --- Small screens --------------------------------------------------------------------------- */
 
 @media (max-width: 720px) {
@@ -1095,5 +1824,18 @@ tbody tr:last-child td {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Reduced motion, V2 loaders: still and readable instead of animated. The blocks keep their resting
+   pose and the progress line shows a fixed segment rather than vanishing at the end of its run. */
+@media (prefers-reduced-motion: reduce) {
+  .dp-boot-mark,
+  .dp-boot-progress span {
+    animation: none;
+  }
+
+  .dp-boot-progress span {
+    left: 30%;
   }
 }

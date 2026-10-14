@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import App from './App.jsx'
-import LoginPage, { AccessCard } from './components/LoginPage.jsx'
+import BootLoader from './components/BootLoader.jsx'
+import LoginPage from './components/LoginPage.jsx'
+import Logo from './components/Logo.jsx'
 import { checkSession, getToken, logout } from './services/api.js'
 
 const SESSION_EXPIRED = 'Your session has expired. Please log in again.'
@@ -53,31 +55,29 @@ export default function AccessGate() {
   if (status === 'signedIn') return <App onLogout={handleLogout} onSessionExpired={handleSessionExpired} />
   if (status === 'signedOut') return <LoginPage onSignedIn={handleSignedIn} notice={notice} />
 
-  if (status === 'unreachable') {
-    return (
-      <AccessCard labelledBy="access-heading">
-        <h1 id="access-heading" className="gate-title">
-          Private Demo Access
+  if (status === 'unreachable') return <Unreachable onRetry={() => setStatus('checking')} />
+  return <BootLoader />
+}
+
+/**
+ * The session could not be checked because DataPilot did not answer (offline, or the server is
+ * down). Not a sign-in problem: the stored token is kept, and Try again checks it once more.
+ */
+function Unreachable({ onRetry }) {
+  return (
+    <main className="dp-access" aria-labelledby="unreachable-heading">
+      <div className="dp-access-card">
+        <Logo className="dp-access-logo" />
+        <h1 id="unreachable-heading" className="dp-access-title">
+          Connection problem
         </h1>
-        <p className="gate-error" role="alert">
+        <p className="dp-access-text" role="alert">
           Unable to reach DataPilot right now. Please try again.
         </p>
-        <button type="button" className="primary-button gate-submit" onClick={() => setStatus('checking')}>
+        <button type="button" className="dp-button-primary dp-access-retry" onClick={onRetry}>
           Try again
         </button>
-      </AccessCard>
-    )
-  }
-
-  return (
-    <AccessCard labelledBy="access-heading">
-      <h1 id="access-heading" className="gate-title">
-        Private Demo Access
-      </h1>
-      <p className="gate-checking" role="status">
-        <span className="status-dot" aria-hidden="true" />
-        Checking access...
-      </p>
-    </AccessCard>
+      </div>
+    </main>
   )
 }
