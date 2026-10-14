@@ -40,6 +40,133 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* UI V2 design tokens (approved handoff: DataPilot-UI-V2-Reference/README.md). Only variables:
+   nothing reads them yet. V2 components use these; the legacy tokens above go once every screen
+   has moved over. */
+:root {
+  /* Colour: text */
+  --dp-ink: #0e1a36; /* navy: primary text, headings, navy buttons; matches the logo */
+  --dp-ink-2: #1a2547; /* body and table text on white */
+  --dp-text-secondary: #414c69;
+  --dp-text-muted: #5f6983; /* labels, meta, inactive nav */
+  --dp-text-subtle: #7f89a3; /* section labels, table headers, icons */
+  --dp-placeholder: #8a93a8;
+
+  /* Colour: brand blue */
+  --dp-accent: #2a59e6; /* pilot blue: links, focus, active nav icon, badges, progress */
+  --dp-accent-hover: #1f47bf; /* link hover, pressed */
+  --dp-primary-gradient: linear-gradient(180deg, #3a68ec, #2450d8); /* Ask and Sign in buttons */
+  --dp-mist: #eef2fb; /* light tint behind the logo, selected states */
+
+  /* Colour: surfaces and lines */
+  --dp-canvas: #fbfcfe; /* app background */
+  --dp-surface: #ffffff; /* cards, sidebar, top bar */
+  --dp-field: #f5f7fb; /* input fill */
+  --dp-nav-active: #f1f4fa;
+  --dp-code-bg: #f7f9fd; /* SQL panel */
+  --dp-skeleton: #eef1f7;
+  --dp-border: #eceff5; /* cards and layout */
+  --dp-border-field: #e6ebf5; /* inputs, dividers */
+  --dp-row-divider: #f0f2f7; /* list and table rows */
+
+  /* Colour: status */
+  --dp-error: #b42318;
+  --dp-error-bg: #fdecea;
+  --dp-error-field-border: #e5a29b;
+  --dp-error-field-bg: #fff8f7;
+  --dp-success: #13703a;
+  --dp-success-bg: #e6f4ea;
+
+  /* Colour: result hero chart card (white marks on blue) */
+  --dp-hero: #2450d8;
+  --dp-chart-highlight: #ffe7b0;
+  --dp-hero-mark: rgba(255, 255, 255, 0.4); /* bars other than the highlight */
+  --dp-hero-axis: rgba(255, 255, 255, 0.88);
+  --dp-hero-grid: rgba(255, 255, 255, 0.16);
+
+  /* Colour: pastel tiles, in order; the same pairs tint History and Saved Reports icon chips */
+  --dp-peach: #fdf1e7;
+  --dp-peach-text: #9a4f14;
+  --dp-mint: #eef5e9;
+  --dp-mint-text: #44702a;
+  --dp-blue: #ecf1ff;
+  --dp-blue-text: #2a52c2;
+  --dp-sage: #e9f4f1;
+  --dp-sage-text: #2a6a5e;
+
+  /* Type */
+  --dp-font-sans: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --dp-font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --dp-weight-light: 300;
+  --dp-weight-regular: 400;
+  --dp-weight-medium: 500;
+  --dp-weight-semibold: 600;
+
+  --dp-text-greeting: 40px; /* empty-state greeting */
+  --dp-text-page-title: 34px; /* History, Saved Reports */
+  --dp-text-question: 32px; /* the question above a result */
+  --dp-text-login-headline: clamp(30px, 3.4vw, 54px);
+  --dp-text-kpi: 28px;
+  --dp-text-xl: 21px; /* the question box; the hero card title */
+  --dp-text-card-title: 19px; /* card titles: 19-21px */
+  --dp-text-body-lg: 17px;
+  --dp-text-body: 16px;
+  --dp-text-body-sm: 15px; /* also table body */
+  --dp-text-table-head: 13.5px;
+  --dp-text-label: 12.5px; /* uppercase section labels: 12-12.5px */
+  --dp-text-label-sm: 12px;
+
+  --dp-tracking-headline: -0.03em; /* login headline */
+  --dp-tracking-greeting: -0.025em;
+  --dp-tracking-title: -0.02em; /* page titles and KPI values */
+  --dp-tracking-label: 0.09em; /* uppercase section labels */
+
+  --dp-leading-headline: 1.12;
+  --dp-leading-body: 1.5;
+  --dp-leading-relaxed: 1.65;
+
+  /* Shape */
+  --dp-radius-sm: 6px; /* small pills: 6-8px */
+  --dp-radius-pill: 8px;
+  --dp-radius-control: 12px; /* inputs, buttons, nav items, chips */
+  --dp-radius-tile: 18px; /* KPI and pastel tiles */
+  --dp-radius-card: 20px; /* cards, hero, query box */
+  --dp-radius-login: 24px;
+
+  /* Depth: cards have a border and no shadow */
+  --dp-shadow-query: inset 0 1px 0 #fff, 0 1px 2px rgba(25, 45, 110, 0.06), 0 4px 8px -2px rgba(25, 45, 110, 0.08),
+    0 18px 32px -10px rgba(25, 45, 110, 0.18), 0 44px 70px -26px rgba(25, 45, 110, 0.28);
+  --dp-query-blur: 16px;
+  --dp-focus-ring: 0 0 0 4px rgba(42, 89, 230, 0.16); /* with a 1px --dp-accent border and a 2px lift */
+  --dp-focus-lift: -2px;
+  --dp-shadow-primary: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 1px 2px rgba(31, 71, 191, 0.4),
+    0 6px 14px -4px rgba(42, 89, 230, 0.45);
+  --dp-shadow-hero: 0 20px 40px -22px rgba(36, 80, 216, 0.7);
+
+  /* Space and layout */
+  --dp-page-padding: 40px; /* top 40-64px */
+  --dp-page-padding-top-lg: 64px;
+  --dp-card-padding: 24px;
+  --dp-gap-tiles: 16px;
+  --dp-gap-cards: 20px;
+  --dp-sidebar-width: 260px;
+  --dp-topbar-height: 80px;
+  --dp-content-ask: 860px;
+  --dp-content-result: 1180px;
+  --dp-content-history: 1000px; /* lists: 1000-1100px */
+  --dp-content-saved: 1100px;
+
+  /* Motion. Every animation and transition is switched off under prefers-reduced-motion (end of file). */
+  --dp-duration-fast: 150ms; /* hover colour, toggles */
+  --dp-duration-base: 200ms; /* focus lift, chevrons */
+  --dp-duration-fade: 400ms; /* app loader fade-out */
+  --dp-duration-enter: 500ms; /* page entrance: fade and 8px slide-up */
+  --dp-enter-offset: 8px;
+  --dp-duration-spin: 800ms; /* button spinner */
+  --dp-duration-pulse: 1.4s; /* skeleton */
+  --dp-placeholder-cycle: 3.6s;
+}
+
 *,
 *::before,
 *::after {

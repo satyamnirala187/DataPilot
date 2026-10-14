@@ -10,9 +10,13 @@ const PATHS = {
   copy: 'M9 9h10v10H9zM5 15V5h10',
   check: 'M5 12l5 5L20 7',
   shield: 'M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z',
+  // UI V2 (drawn at strokeWidth 1.7)
+  chat: 'M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z',
+  bookmark: 'M6 4h12v17l-6-4-6 4z',
+  alertCircle: 'M12 2.5a9.5 9.5 0 1 0 0 19 9.5 9.5 0 1 0 0-19zM12 7.5v5.5M12 16.5v.01',
 }
 
-export default function Icon({ name, size = 18, className = '' }) {
+export default function Icon({ name, size = 18, strokeWidth = 2, className = '' }) {
   return (
     <svg
       className={`icon ${className}`}
@@ -21,7 +25,7 @@ export default function Icon({ name, size = 18, className = '' }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
