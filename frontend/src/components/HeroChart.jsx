@@ -160,18 +160,33 @@ function BarHero({ view }) {
               ))}
               <LabelList
                 dataKey="y"
-                position="right"
-                offset={10}
-                fill="var(--dp-hero-text)"
-                fontSize={13}
-                fontWeight={500}
-                formatter={(value) => (typeof value === 'number' ? formatSummaryValue(yKey, value) : '')}
+                content={({ x, y, width, height, value }) => (
+                  <BarValueLabel x={x} y={y} width={width} height={height} value={value} yKey={yKey} />
+                )}
               />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
     </HeroFrame>
+  )
+}
+
+// A bar's value, just right of the bar: at its end for a positive value, and at the zero line for a
+// negative one (whose bar runs left), so it never lands on the category names.
+function BarValueLabel({ x, y, width, height, value, yKey }) {
+  if (typeof value !== 'number' || [x, y, width, height].some((n) => typeof n !== 'number')) return null
+  return (
+    <text
+      x={Math.max(x, x + width) + 10}
+      y={y + height / 2}
+      dy="0.35em"
+      fill="var(--dp-hero-text)"
+      fontSize={13}
+      fontWeight={500}
+    >
+      {formatSummaryValue(yKey, value)}
+    </text>
   )
 }
 

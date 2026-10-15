@@ -150,6 +150,7 @@
   --dp-gap-tiles: 16px;
   --dp-gap-cards: 20px;
   --dp-sidebar-width: 260px;
+  --dp-rail-width: 76px; /* the sidebar as an icon rail, below 1100px */
   --dp-topbar-height: 80px;
   --dp-content-ask: 860px;
   --dp-content-result: 1180px;
@@ -2057,29 +2058,6 @@ tbody tr:last-child td {
   stroke: var(--dp-border-control);
 }
 
-/* No approved narrow layout for these pages yet: keep them readable and inside the window. */
-@media (max-width: 720px) {
-  .dp-page {
-    padding: 28px 16px 80px;
-  }
-
-  .dp-greeting {
-    font-size: 30px;
-  }
-
-  .dp-question-title {
-    font-size: 24px;
-  }
-
-  .dp-query textarea {
-    font-size: 18px;
-  }
-
-  .dp-analysis {
-    padding: 22px 20px;
-  }
-}
-
 /* --- UI V2: Result (answer, summary tiles, hero card, insight, data, SQL, errors) ---------------
    Every number on these cards comes from the result's own rows (utils/result.js). */
 
@@ -2687,47 +2665,6 @@ tbody tr:last-child td {
   outline-offset: 2px;
 }
 
-/* No approved narrow layout yet: keep the result readable and inside the window. */
-@media (max-width: 720px) {
-  .dp-tiles {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .dp-tile {
-    min-height: 0;
-  }
-
-  .dp-tile-note {
-    margin-top: 4px;
-  }
-
-  .dp-hero,
-  .dp-hero-kpi {
-    padding: 18px 16px 12px;
-  }
-
-  .dp-hero-kpi-value {
-    font-size: 36px;
-  }
-
-  .dp-hero-head {
-    flex-wrap: wrap;
-  }
-
-  .dp-table th,
-  .dp-table td {
-    padding: 10px 12px;
-  }
-
-  .dp-error-card {
-    padding: 22px 20px;
-  }
-
-  .dp-sql-toggle {
-    flex-wrap: wrap;
-  }
-}
-
 /* --- UI V2: History (list, search, reopened analysis) and the page loader -------------------------
    Values from the approved App reference. */
 
@@ -3122,36 +3059,6 @@ tbody tr:last-child td {
   margin-top: 18px;
 }
 
-/* No approved narrow layout yet: the time and Saved label move under the question. */
-@media (max-width: 720px) {
-  .dp-history-row {
-    flex-wrap: wrap;
-    padding: 14px 16px;
-  }
-
-  .dp-history-side {
-    flex-basis: 100%;
-    flex-wrap: wrap;
-    gap: 8px 14px;
-    padding-left: 60px;
-  }
-
-  .dp-page-title {
-    font-size: 28px;
-  }
-}
-
-/* Very narrow: the decorative type icon gives its width to the question. */
-@media (max-width: 480px) {
-  .dp-history-chip {
-    display: none;
-  }
-
-  .dp-history-side {
-    padding-left: 0;
-  }
-}
-
 /* Reduced motion: the loader holds still. */
 @media (prefers-reduced-motion: reduce) {
   .dp-page-bar span,
@@ -3477,31 +3384,6 @@ tbody tr:last-child td {
   text-align: center;
 }
 
-/* No approved narrow layout yet: each report stacks its title, question and date. */
-@media (max-width: 720px) {
-  .dp-saved-columns {
-    display: none;
-  }
-
-  .dp-saved-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
-    padding: 14px 16px;
-  }
-
-  .dp-saved-question,
-  .dp-saved-date {
-    padding-left: 58px;
-  }
-}
-
-@media (max-width: 480px) {
-  .dp-saved-question,
-  .dp-saved-date {
-    padding-left: 0;
-  }
-}
-
 /* --- UI V2: signed-in app shell (sidebar, top bar, main) -----------------------------------------
    Only the frame is V2. The Ask page inside it is still the pre-V2 UI and keeps the legacy styles
    and fonts, so V2 type is set on the sidebar and top bar, not on the shell as a whole. */
@@ -3532,6 +3414,9 @@ tbody tr:last-child td {
   height: 100vh;
   height: 100dvh;
   padding: 32px 20px 24px;
+  /* On a very short window the sidebar scrolls on its own, so Log out stays reachable. */
+  overflow-x: hidden;
+  overflow-y: auto;
   border-right: 1px solid var(--dp-border);
   background: var(--dp-surface);
 }
@@ -3768,24 +3653,6 @@ tbody tr:last-child td {
   color: var(--dp-text-muted);
 }
 
-/* No approved narrow-screen shell yet: only keep it from overflowing. The full responsive shell
-   comes in its own batch. */
-@media (max-width: 720px) {
-  .dp-sidebar {
-    width: 200px;
-    padding-right: 12px;
-    padding-left: 12px;
-  }
-
-  .dp-topbar {
-    padding: 0 16px;
-  }
-
-  .dp-workspace {
-    display: none;
-  }
-}
-
 /* --- Small screens --------------------------------------------------------------------------- */
 
 @media (max-width: 720px) {
@@ -3856,5 +3723,257 @@ tbody tr:last-child td {
 
   .dp-boot-progress span {
     left: 30%;
+  }
+}
+
+/* --- UI V2: responsive layout ----------------------------------------------------------------------
+   The approved design is desktop-first; narrower windows keep its look in a few small steps:
+     <= 1099px  the sidebar becomes an icon rail (labels stay for screen readers and as tooltips)
+     <=  768px  tighter pages, smaller headings, list rows stack
+     <=  600px  a shorter top bar without the workspace label, a narrower rail
+     <=  480px  summary tiles in one column
+   Data tables may scroll sideways inside their card; the page itself never does. The login page
+   keeps its own steps (UI V2: access screens). */
+
+/* The symbol (shown by the sidebar's <picture> in the rail) is shown only in the rail. */
+.dp-sidebar-logo picture {
+  display: block;
+}
+
+@media (max-width: 1099px) {
+  .dp-sidebar {
+    align-items: center;
+    width: var(--dp-rail-width);
+    padding: 24px 12px 20px;
+  }
+
+  .dp-sidebar-logo {
+    padding: 0;
+  }
+
+  .dp-sidebar-logo img {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Hidden visually only: still the nav's name and each button's name. */
+  .dp-sidebar-label,
+  .dp-nav-label,
+  .dp-profile-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .dp-sidebar-nav {
+    width: 100%;
+    margin-top: 36px;
+  }
+
+  .dp-sidebar-footer {
+    align-items: center;
+    width: 100%;
+  }
+
+  .dp-nav-item {
+    position: relative;
+    justify-content: center;
+    width: 100%;
+    min-height: 46px;
+    padding: 12px;
+  }
+
+  /* The count sits on the icon's top-right corner (its left edge at the icon's centre), inside
+     the rail even as "50+". */
+  .dp-nav-badge {
+    position: absolute;
+    top: 3px;
+    left: calc(50% + 2px);
+    min-width: 18px;
+    margin-left: 0;
+    padding: 0 4px;
+    border: 2px solid var(--dp-surface);
+    font-size: 10.5px;
+    line-height: 14px;
+    box-sizing: content-box;
+  }
+
+  .dp-profile {
+    justify-content: center;
+    padding: 8px 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .dp-topbar {
+    gap: 16px;
+    padding: 0 20px;
+  }
+
+  .dp-workspace-label {
+    display: none;
+  }
+
+  .dp-page {
+    padding: 28px 20px 80px;
+  }
+
+  .dp-greeting {
+    font-size: 30px;
+  }
+
+  .dp-question-title {
+    font-size: 26px;
+  }
+
+  .dp-page-title {
+    font-size: 28px;
+  }
+
+  .dp-query textarea {
+    font-size: 18px;
+  }
+
+  .dp-analysis {
+    padding: 22px 20px;
+  }
+
+  .dp-hero,
+  .dp-hero-kpi {
+    padding: 18px 16px 12px;
+  }
+
+  .dp-hero-kpi-value {
+    font-size: 40px;
+  }
+
+  .dp-hero-head {
+    flex-wrap: wrap;
+  }
+
+  .dp-table th,
+  .dp-table td {
+    padding: 10px 12px;
+  }
+
+  .dp-error-card {
+    padding: 22px 20px;
+  }
+
+  .dp-sql-toggle {
+    flex-wrap: wrap;
+  }
+
+  /* History: the Saved label and time move under the question, in line with it. */
+  .dp-history-row {
+    flex-wrap: wrap;
+    padding: 14px 16px;
+  }
+
+  .dp-history-side {
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    padding-left: 60px;
+  }
+
+  /* Saved Reports: each report stacks its title, question and date under its icon. */
+  .dp-saved-columns {
+    display: none;
+  }
+
+  .dp-saved-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    padding: 14px 16px;
+  }
+
+  .dp-saved-question,
+  .dp-saved-date {
+    padding-left: 58px;
+  }
+}
+
+@media (max-width: 600px) {
+  :root {
+    --dp-rail-width: 64px;
+    --dp-topbar-height: 64px;
+  }
+
+  .dp-sidebar {
+    padding: 18px 8px 16px;
+  }
+
+  .dp-sidebar-logo img {
+    width: 32px;
+    height: 32px;
+  }
+
+  .dp-sidebar-nav {
+    margin-top: 28px;
+  }
+
+  .dp-nav-item {
+    padding: 12px 8px;
+  }
+
+  /* A slightly smaller count, so "50+" stays inside the narrower rail. */
+  .dp-nav-badge {
+    left: calc(50% + 1px);
+    padding: 0 3px;
+    font-size: 10px;
+  }
+
+  .dp-topbar {
+    padding: 0 16px;
+  }
+
+  .dp-topbar-ask {
+    height: 44px;
+    max-width: none;
+  }
+
+  .dp-workspace {
+    display: none;
+  }
+
+  .dp-page {
+    padding: 24px 16px 72px;
+  }
+
+  .dp-greeting {
+    font-size: 28px;
+  }
+
+  .dp-question-title {
+    font-size: 24px;
+  }
+
+  .dp-dialog {
+    padding: 22px 18px 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dp-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dp-tile {
+    min-height: 0;
+  }
+
+  .dp-tile-note {
+    margin-top: 4px;
+  }
+
+  .dp-hero-kpi-value {
+    font-size: 36px;
   }
 }

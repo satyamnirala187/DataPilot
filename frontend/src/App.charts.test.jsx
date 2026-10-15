@@ -212,6 +212,20 @@ describe('bar result', () => {
     expect(within(chart).getByText('₹73.7 L')).toBeInTheDocument() // bar value label
   })
 
+  it('puts a negative bar value beside the zero line, never on top of the category names', async () => {
+    vi.stubGlobal('matchMedia', (query) => ({ matches: query.includes('reduce'), media: query, addEventListener() {}, removeEventListener() {} }))
+    await showResult({ ...BAR, columns: ['category_name', 'profit'], rows: [['Apparel', -640000], ['Electronics', 5460000]], visualization: { type: 'bar', x_key: 'category_name', y_key: 'profit' } })
+    const chart = screen.getByRole('img', { name: /^Bar chart of profit/ })
+    // The positive bar starts at the zero line; the negative bar runs left from it.
+    const [, positiveBar] = chart.querySelectorAll('.recharts-bar-rectangle path')
+    const zeroX = Number(/^M\s*([\d.]+)/.exec(positiveBar.getAttribute('d'))[1])
+    const negative = within(chart).getByText('-₹6.4 L')
+    const positive = within(chart).getByText('₹54.6 L')
+    expect(Number(negative.getAttribute('x'))).toBeGreaterThan(zeroX)
+    expect(Number(positive.getAttribute('x'))).toBeGreaterThan(Number(negative.getAttribute('x')))
+    expect(within(chart).getByText('Apparel')).toBeInTheDocument()
+  })
+
   it('labels every derived tile as covering the shown rows', async () => {
     const { container } = await showResult(BAR)
     expect(tiles()).toEqual([

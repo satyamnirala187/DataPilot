@@ -330,6 +330,23 @@ describe('app shell', () => {
     ])
   })
 
+  it('keeps every sidebar name for the narrow icon rail: labels as text, tooltips, one logo image', () => {
+    render(<App />)
+    for (const name of ['Ask DataPilot', 'History', 'Saved Reports', 'Log out']) {
+      const button = screen.getByRole('button', { name })
+      // The label stays in the button (hidden only visually in the rail) and as its tooltip.
+      expect(button.querySelector('.dp-nav-label')).toHaveTextContent(name)
+      expect(button).toHaveAttribute('title', name)
+    }
+    // One logo image: the full logo, swapped for the symbol by the picture's media source.
+    const logos = screen.getAllByRole('img', { name: 'DataPilot' })
+    expect(logos).toHaveLength(1)
+    const source = logos[0].closest('picture').querySelector('source')
+    expect(source).toHaveAttribute('media', '(max-width: 1099px)')
+    expect(source.getAttribute('srcset')).toMatch(/favicon\.svg$/)
+    expect(screen.getByRole('navigation', { name: 'Main menu' })).toBeInTheDocument()
+  })
+
   it('shows the profile as text, not as a control', () => {
     render(<App />)
     expect(screen.getByText('Saty').closest('button, a, [role="button"], [tabindex]')).toBeNull()

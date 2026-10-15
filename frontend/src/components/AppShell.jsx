@@ -2,6 +2,12 @@ import { WORKSPACE } from '../config/workspace.js'
 import Icon from './Icon.jsx'
 import Logo from './Logo.jsx'
 
+// The approved DataPilot symbol (the favicon), shown in place of the full logo when the sidebar is
+// a narrow icon rail. Same picture, same alt text: one image either way.
+const SYMBOL_URL = `${import.meta.env.BASE_URL}favicon.svg`
+// Keep in step with the rail breakpoint in index.css (UI V2: responsive layout).
+const RAIL_MEDIA = '(max-width: 1099px)'
+
 // The signed-in views, in sidebar order.
 const NAV_ITEMS = [
   { view: 'ask', label: 'Ask DataPilot', icon: 'chat' },
@@ -30,7 +36,10 @@ function Sidebar({ view, onNavigate, onLogout, savedBadge }) {
   return (
     <div className="dp-sidebar">
       <div className="dp-sidebar-logo">
-        <Logo />
+        <picture>
+          <source media={RAIL_MEDIA} srcSet={SYMBOL_URL} />
+          <Logo />
+        </picture>
       </div>
 
       <nav className="dp-sidebar-nav" aria-labelledby="dp-nav-label">
@@ -42,14 +51,17 @@ function Sidebar({ view, onNavigate, onLogout, savedBadge }) {
             const active = item.view === view
             return (
               <li key={item.view}>
+                {/* In the icon rail the label is hidden visually but still names the button; the
+                    title gives mouse users the same name. */}
                 <button
                   type="button"
                   className="dp-nav-item"
                   aria-current={active ? 'page' : undefined}
+                  title={item.label}
                   onClick={() => onNavigate(item.view)}
                 >
                   <Icon name={item.icon} size={20} strokeWidth={1.7} />
-                  {item.label}
+                  <span className="dp-nav-label">{item.label}</span>
                   {/* Visual only, so the button is still announced as "Saved Reports". */}
                   {item.view === 'saved' && savedBadge && (
                     <span className="dp-nav-badge" aria-hidden="true">
@@ -74,9 +86,9 @@ function Sidebar({ view, onNavigate, onLogout, savedBadge }) {
             <p className="dp-profile-meta">{WORKSPACE.department}</p>
           </div>
         </div>
-        <button type="button" className="dp-nav-item dp-logout" onClick={onLogout}>
+        <button type="button" className="dp-nav-item dp-logout" title="Log out" onClick={onLogout}>
           <Icon name="logout" size={20} strokeWidth={1.7} />
-          Log out
+          <span className="dp-nav-label">Log out</span>
         </button>
       </div>
     </div>
