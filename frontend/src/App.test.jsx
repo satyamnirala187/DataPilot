@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.jsx'
+import { stubFetch } from './test/fetch.js'
 import { PLACEHOLDERS, QUICK_QUESTIONS, STEP_STARTS_MS } from './config/askContent.js'
 
 // All tests mock fetch: no real backend, Gemini or database calls.
@@ -38,10 +39,11 @@ async function ask(user, question) {
 }
 
 let fetchMock
+let savedListMock
 
 beforeEach(() => {
   fetchMock = vi.fn()
-  vi.stubGlobal('fetch', fetchMock)
+  savedListMock = stubFetch(fetchMock)
 })
 
 afterEach(() => {
@@ -352,15 +354,15 @@ describe('app shell', () => {
     expect(screen.queryByLabelText('Your question')).not.toBeInTheDocument()
 
     await user.click(navButton('Saved Reports'))
-    expect(screen.getByRole('heading', { level: 1, name: 'Saved Reports' })).toBeInTheDocument()
-    expect(screen.getByText('Saved reports will appear here.')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Saved Reports' })).toBeInTheDocument()
     expect(navButton('Saved Reports')).toHaveAttribute('aria-current', 'page')
 
     await user.click(navButton('Ask DataPilot'))
     expect(screen.getByLabelText('Your question')).toBeInTheDocument()
     expect(navButton('Ask DataPilot')).toHaveAttribute('aria-current', 'page')
-    // Only the History list was read; Saved Reports is still a placeholder and loads nothing.
+    // Only the lists were read: History once, saved reports when the app opened and on the page.
     expect(fetchMock.mock.calls.map(([url]) => new URL(url).pathname)).toEqual(['/history'])
+    expect(savedListMock).toHaveBeenCalledTimes(2)
   })
 
   it('keeps the answer and the typed question when moving between pages, without asking again', async () => {
@@ -645,10 +647,12 @@ describe('Ask page V2', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('keeps the first placeholder still when reduced motion is preferred', () => {
+  it('keeps the first placeholder still when reduced motion is preferred', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('matchMedia', (query) => ({ matches: query.includes('reduce'), media: query, addEventListener() {}, removeEventListener() {} }))
     render(<App />)
+    // Let the saved-reports count request settle, so its request timeout is cleared.
+    await act(async () => {})
     act(() => vi.advanceTimersByTime(3600 * 3))
     expect(screen.getByLabelText('Your question')).toHaveAttribute('placeholder', 'Ask your question…')
     expect(vi.getTimerCount()).toBe(0)

@@ -12,8 +12,10 @@ import SqlViewer from './SqlViewer.jsx'
  * insight and the Data card, then the SQL. It takes any result-shaped object (a /query answer,
  * and later a History or Saved Reports analysis) and reads only question, sql, columns, rows,
  * row_count, truncated, visualization and insight. Extra fields are ignored; nothing is changed.
+ * actions: optional controls shown under the result (e.g. Save Report), supplied by the caller,
+ * so this view never talks to the API itself.
  */
-export default function ResultView({ result }) {
+export default function ResultView({ result, actions = null }) {
   const view = useMemo(() => describeResult(result), [result])
   const columns = Array.isArray(result.columns) ? result.columns : []
   const rows = Array.isArray(result.rows) ? result.rows : []
@@ -62,6 +64,8 @@ export default function ResultView({ result }) {
       )}
 
       {typeof result.sql === 'string' && result.sql && <SqlViewer sql={result.sql} />}
+
+      {actions && <div className="dp-result-actions">{actions}</div>}
     </div>
   )
 }

@@ -182,6 +182,11 @@
   --dp-radius-mini-tile: 14px; /* "Try instead" questions */
   --dp-shadow-tooltip: 0 10px 28px -10px rgba(14, 26, 54, 0.35);
 
+  /* Saved Reports (values from the approved App reference) */
+  --dp-saved-border: #9cb3f2; /* the "Saved" label's tinted outline */
+  --dp-dialog-backdrop: rgba(14, 26, 54, 0.32);
+  --dp-shadow-dialog: 0 24px 60px -20px rgba(14, 26, 54, 0.45);
+
   /* App shell (values from the approved App reference) */
   --dp-surface-hover: #f6f8fc; /* nav and quiet-button hover */
   --dp-avatar-bg: #e0e8fa;
@@ -3156,6 +3161,344 @@ tbody tr:last-child td {
 
   .dp-page-bar span {
     left: 30%;
+  }
+}
+
+/* --- UI V2: Saved Reports (list, reopened report), Save Report action and dialog, sidebar count -----
+   Values from the approved App reference. */
+
+.dp-saved {
+  max-width: calc(var(--dp-content-saved) + 2 * var(--dp-page-padding));
+}
+
+.dp-saved-card {
+  margin-top: 30px;
+  overflow: hidden;
+}
+
+.dp-saved-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 20px 24px;
+}
+
+.dp-saved-limit {
+  font-size: var(--dp-text-table-head);
+  color: var(--dp-text-muted);
+}
+
+/* Report, Question, Saved: one grid for the labels and every row. */
+.dp-saved-columns,
+.dp-saved-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.6fr) minmax(0, 0.8fr);
+  align-items: center;
+  gap: 20px;
+  padding-right: 24px;
+  padding-left: 24px;
+}
+
+.dp-saved-columns {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  border-top: 1px solid var(--dp-border);
+  border-bottom: 1px solid var(--dp-border);
+  color: var(--dp-text-subtle);
+  font-size: var(--dp-text-table-head);
+}
+
+.dp-saved-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dp-saved-row {
+  width: 100%;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  border: 0;
+  border-bottom: 1px solid var(--dp-row-divider);
+  background: transparent;
+  color: var(--dp-ink);
+  font-family: var(--dp-font-sans);
+  text-align: left;
+  transition: background var(--dp-duration-fast);
+}
+
+.dp-saved-list li:last-child .dp-saved-row {
+  border-bottom: 0;
+}
+
+.dp-saved-row:hover {
+  background: var(--dp-sql-hover);
+}
+
+.dp-saved-row:hover .dp-saved-title {
+  color: var(--dp-accent);
+}
+
+.dp-saved-row:focus-visible {
+  outline: 2px solid var(--dp-accent);
+  outline-offset: -2px;
+}
+
+.dp-saved-report {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.dp-saved-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dp-saved-title {
+  font-size: 15.5px;
+  font-weight: var(--dp-weight-medium);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  transition: color var(--dp-duration-fast);
+}
+
+.dp-saved-question {
+  font-size: 14.5px;
+  font-weight: var(--dp-weight-light);
+  line-height: 1.4;
+  color: var(--dp-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.dp-saved-date {
+  font-size: 14px;
+  color: var(--dp-text-muted);
+}
+
+.dp-saved-nomatch {
+  margin: 0;
+  padding: 16px 24px 24px;
+}
+
+/* A reopened report: its title above the stored analysis. */
+.dp-report-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: var(--dp-text-body-sm);
+  color: var(--dp-text-muted);
+}
+
+.dp-report-meta .icon {
+  color: var(--dp-accent);
+}
+
+.dp-report-meta-title {
+  font-weight: var(--dp-weight-medium);
+  color: var(--dp-ink);
+  overflow-wrap: anywhere;
+}
+
+.dp-report-meta-label::after,
+.dp-report-meta-title::after {
+  content: '·';
+  margin-left: 10px;
+  color: var(--dp-text-subtle);
+}
+
+/* The action row under a result: Save Report, or the quiet "Saved" label. */
+.dp-result-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.dp-save-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.dp-save-notice {
+  font-size: 14px;
+  color: var(--dp-text-muted);
+}
+
+.dp-save-notice:empty {
+  display: none;
+}
+
+.dp-save-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dp-saved-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border: 1px solid var(--dp-saved-border);
+  border-radius: var(--dp-radius-control);
+  background: var(--dp-mist);
+  color: var(--dp-accent);
+  font-family: var(--dp-font-sans);
+  font-size: 14.5px;
+  font-weight: var(--dp-weight-medium);
+}
+
+.dp-saved-state .icon path {
+  fill: currentColor;
+}
+
+.dp-saved-state:focus-visible {
+  outline: 2px solid var(--dp-accent);
+  outline-offset: 2px;
+}
+
+/* Save Report dialog. The backdrop only covers the page; it is not clickable. */
+.dp-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--dp-dialog-backdrop);
+}
+
+.dp-dialog {
+  width: 100%;
+  max-width: 480px;
+  padding: 26px 26px 22px;
+  border-radius: var(--dp-radius-card);
+  background: var(--dp-surface);
+  box-shadow: var(--dp-shadow-dialog);
+  color: var(--dp-ink);
+  font-family: var(--dp-font-sans);
+}
+
+.dp-dialog-title {
+  font-size: 20px;
+  font-weight: var(--dp-weight-medium);
+}
+
+.dp-dialog-label {
+  display: block;
+  margin-top: 18px;
+  font-size: 14px;
+  font-weight: var(--dp-weight-medium);
+}
+
+.dp-dialog-input {
+  width: 100%;
+  height: 46px;
+  margin-top: 8px;
+  padding: 0 14px;
+  border: 1px solid var(--dp-border-field);
+  border-radius: var(--dp-radius-control);
+  background: var(--dp-field);
+  color: var(--dp-ink);
+  font-family: inherit;
+  font-size: var(--dp-text-body-sm);
+}
+
+.dp-dialog-input:focus-visible {
+  border-color: var(--dp-accent);
+  outline: none;
+  background: var(--dp-surface);
+  box-shadow: var(--dp-focus-ring);
+}
+
+.dp-dialog-input[aria-invalid='true'] {
+  border-color: var(--dp-error-field-border);
+  background: var(--dp-error-field-bg);
+}
+
+.dp-dialog-note {
+  margin-top: 8px;
+  font-size: 13.5px;
+  color: var(--dp-text-muted);
+}
+
+.dp-dialog-problem {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--dp-error);
+}
+
+.dp-dialog-failure {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--dp-radius-control);
+  background: var(--dp-error-bg);
+  color: var(--dp-error);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.dp-dialog-failure-title {
+  font-weight: var(--dp-weight-medium);
+}
+
+.dp-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.dp-dialog-actions button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* Sidebar: the real Saved Reports count. */
+.dp-nav-badge {
+  min-width: 22px;
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--dp-accent);
+  color: var(--dp-hero-text);
+  font-size: var(--dp-text-label-sm);
+  font-weight: var(--dp-weight-semibold);
+  line-height: 18px;
+  text-align: center;
+}
+
+/* No approved narrow layout yet: each report stacks its title, question and date. */
+@media (max-width: 720px) {
+  .dp-saved-columns {
+    display: none;
+  }
+
+  .dp-saved-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    padding: 14px 16px;
+  }
+
+  .dp-saved-question,
+  .dp-saved-date {
+    padding-left: 58px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dp-saved-question,
+  .dp-saved-date {
+    padding-left: 0;
   }
 }
 

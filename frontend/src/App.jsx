@@ -7,6 +7,9 @@ import HistoryPage from './components/HistoryPage.jsx'
 import QuestionForm from './components/QuestionForm.jsx'
 import QuestionHeader from './components/QuestionHeader.jsx'
 import ResultView from './components/ResultView.jsx'
+import SaveReportAction from './components/SaveReportAction.jsx'
+import SavedReportsPage from './components/SavedReportsPage.jsx'
+import { useSavedReports } from './hooks/useSavedReports.js'
 import { SessionExpiredError, postQuery } from './services/api.js'
 
 // Statuses that mean "try again shortly" are shown as a calm warning, not as a failure.
@@ -26,6 +29,10 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
   const [focusRequest, setFocusRequest] = useState(0)
   // Bumped by the History button: if an analysis is open in History, it goes back to the list.
   const [historyRequest, setHistoryRequest] = useState(0)
+  // The same for Saved Reports and an open saved report.
+  const [savedRequest, setSavedRequest] = useState(0)
+  // Saved-report state for the sidebar count, "Saved" labels and saving (read once on opening).
+  const savedReports = useSavedReports(onSessionExpired)
   const questionRef = useRef(null)
   const [question, setQuestion] = useState('')
   const [validationError, setValidationError] = useState(null)
@@ -87,6 +94,7 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
 
   function handleNavigate(next) {
     if (next === 'history') setHistoryRequest((count) => count + 1)
+    if (next === 'saved') setSavedRequest((count) => count + 1)
     setView(next)
   }
 
@@ -109,11 +117,21 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
       onAskAnother={handleAskAnother}
       showAskAnother={!askHome}
       onLogout={onLogout}
+      savedBadge={savedReports.badge}
     >
       {/* Shown only while open, so each visit loads the list again. Its reopened analyses never
           replace the Ask page's question and answer below. */}
-      {view === 'history' && <HistoryPage listRequest={historyRequest} onSessionExpired={onSessionExpired} />}
-      {view === 'saved' && <ViewPlaceholder title="Saved Reports" text="Saved reports will appear here." />}
+      {view === 'history' && (
+        <HistoryPage
+          listRequest={historyRequest}
+          onSessionExpired={onSessionExpired}
+          isSaved={savedReports.isSaved}
+          onSaveReport={savedReports.save}
+        />
+      )}
+      {view === 'saved' && (
+        <SavedReportsPage listRequest={savedRequest} onSessionExpired={onSessionExpired} onListLoaded={savedReports.replaceList} />
+      )}
       {view === 'ask' && (
         <AskPage
           question={question}
@@ -125,6 +143,8 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
           validationError={validationError}
           result={result}
           error={error}
+          isSaved={savedReports.isSaved}
+          onSaveReport={savedReports.save}
         />
       )}
     </AppShell>
@@ -138,7 +158,19 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
  *   answer or error    the V2 answer (ResultView) or error card, with the question box above
  *                      it for the next question
  */
-function AskPage({ question, onQuestionChange, onSubmit, onQuickQuestion, questionRef, loading, validationError, result, error }) {
+function AskPage({
+  question,
+  onQuestionChange,
+  onSubmit,
+  onQuickQuestion,
+  questionRef,
+  loading,
+  validationError,
+  result,
+  error,
+  isSaved,
+  onSaveReport,
+}) {
   const formProps = { question, onQuestionChange, onSubmit, loading, validationError, inputRef: questionRef }
   return (
     <>
@@ -149,7 +181,14 @@ function AskPage({ question, onQuestionChange, onSubmit, onQuickQuestion, questi
       {loading ? (
         <AnalysisProgress question={question.trim()} />
       ) : result || error ? (
-        <AnswerPage formProps={formProps} result={result} error={error} onTryQuestion={onQuickQuestion} />
+        <AnswerPage
+          formProps={formProps}
+          result={result}
+          error={error}
+          onTryQuestion={onQuickQuestion}
+          isSaved={isSaved}
+          onSaveReport={onSaveReport}
+        />
       ) : (
         <AskHome onAsk={onQuickQuestion} {...formProps} />
       )}
@@ -161,12 +200,25 @@ function AskPage({ question, onQuestionChange, onSubmit, onQuickQuestion, questi
  * The answer or the error for the last question, below a compact question box for the next one.
  * A stopped question's "Try instead" questions are asked like quick questions.
  */
-function AnswerPage({ formProps, result, error, onTryQuestion }) {
+function AnswerPage({ formProps, result, error, onTryQuestion, isSaved, onSaveReport }) {
   return (
     <div className="dp-page dp-page-result">
       <QuestionForm {...formProps} compact />
       {result ? (
-        <ResultView result={result} />
+        <ResultView
+          result={result}
+          actions={
+            // Only an answer that was recorded (it has an analysis_id) can be saved.
+            result.analysis_id ? (
+              <SaveReportAction
+                analysisId={result.analysis_id}
+                question={result.question}
+                saved={isSaved(result.analysis_id)}
+                onSave={onSaveReport}
+              />
+            ) : null
+          }
+        />
       ) : (
         <div className="dp-result">
           <QuestionHeader question={error.question} />
@@ -179,16 +231,6 @@ function AnswerPage({ formProps, result, error, onTryQuestion }) {
           />
         </div>
       )}
-    </div>
-  )
-}
-
-/** A temporary stand-in for a page that is built in a later batch: a heading and one line. */
-function ViewPlaceholder({ title, text }) {
-  return (
-    <div className="dp-placeholder">
-      <h1>{title}</h1>
-      <p>{text}</p>
     </div>
   )
 }

@@ -1,16 +1,16 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ApiError, SessionExpiredError, getAnalysis, getHistory } from '../services/api.js'
-import { describeHistoryItem, filterHistory, groupHistory, historyKind, parseTimestamp } from '../utils/history.js'
+import { describeHistoryItem, filterHistory, groupHistory, historyKind, kindIcon, parseTimestamp } from '../utils/history.js'
 import ErrorMessage from './ErrorMessage.jsx'
 import Icon from './Icon.jsx'
 import { PageBar, PageSkeleton } from './PageLoader.jsx'
 import ResultView from './ResultView.jsx'
+import SaveReportAction from './SaveReportAction.jsx'
 
 const LIST_LIMIT = 100
 // As on the Ask page: statuses that mean "try again shortly" are a calm warning, not a failure.
 // status null = the backend could not be reached or the request timed out.
 const TEMPORARY_STATUSES = new Set([null, 429, 503, 504])
-const KIND_ICONS = { kpi: 'target', line: 'trend', bar: 'chart', table: 'table', other: 'chat' }
 
 /**
  * The History page: the account's recorded analyses (the newest 100), grouped by day, searchable,
@@ -22,8 +22,11 @@ const KIND_ICONS = { kpi: 'target', line: 'trend', bar: 'chart', table: 'table',
  *
  * listRequest changes when the History button is used again while History is open: an open
  * analysis then closes back to the list (without reloading it).
+ *
+ * isSaved(analysisId) and onSaveReport(analysisId, title) come from useSavedReports: a reopened
+ * analysis can be saved, and its row shows "Saved" afterwards without reloading the list.
  */
-export default function HistoryPage({ listRequest = 0, onSessionExpired }) {
+export default function HistoryPage({ listRequest = 0, onSessionExpired, isSaved = () => false, onSaveReport }) {
   const [list, setList] = useState({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
   const [search, setSearch] = useState('')
@@ -100,7 +103,16 @@ export default function HistoryPage({ listRequest = 0, onSessionExpired }) {
   }
 
   if (showingDetail) {
-    return <AnalysisDetail detail={detail} backRef={backRef} onBack={backToList} onRetry={retryAnalysis} />
+    return (
+      <AnalysisDetail
+        detail={detail}
+        backRef={backRef}
+        onBack={backToList}
+        onRetry={retryAnalysis}
+        isSaved={isSaved}
+        onSaveReport={onSaveReport}
+      />
+    )
   }
   if (list.status === 'loading') {
     return (
@@ -134,7 +146,7 @@ export default function HistoryPage({ listRequest = 0, onSessionExpired }) {
           </div>
         </div>
       ) : (
-        <HistoryGroups items={list.items} now={list.now} search={search} rowRefs={rowRefs} onOpen={openAnalysis} />
+        <HistoryGroups items={list.items} now={list.now} search={search} rowRefs={rowRefs} isSaved={isSaved} onOpen={openAnalysis} />
       )}
     </div>
   )
@@ -161,7 +173,7 @@ function HistoryHeader({ search, onSearch }) {
   )
 }
 
-function HistoryGroups({ items, now, search, rowRefs, onOpen }) {
+function HistoryGroups({ items, now, search, rowRefs, isSaved, onOpen }) {
   const groups = useMemo(() => groupHistory(filterHistory(items, search), now), [items, now, search])
   if (groups.length === 0) {
     return (
@@ -173,13 +185,13 @@ function HistoryGroups({ items, now, search, rowRefs, onOpen }) {
   return (
     <div className="dp-history-groups">
       {groups.map((group) => (
-        <HistoryGroup key={group.label} group={group} rowRefs={rowRefs} onOpen={onOpen} />
+        <HistoryGroup key={group.label} group={group} rowRefs={rowRefs} isSaved={isSaved} onOpen={onOpen} />
       ))}
     </div>
   )
 }
 
-function HistoryGroup({ group, rowRefs, onOpen }) {
+function HistoryGroup({ group, rowRefs, isSaved, onOpen }) {
   const id = useId()
   return (
     <section aria-labelledby={id}>
@@ -202,15 +214,15 @@ function HistoryGroup({ group, rowRefs, onOpen }) {
                 onClick={() => onOpen(item.id)}
               >
                 <span className="dp-history-chip" data-kind={kind}>
-                  <Icon name={KIND_ICONS[kind]} size={20} strokeWidth={1.7} />
+                  <Icon name={kindIcon(item.visualization_type)} size={20} strokeWidth={1.7} />
                 </span>
                 <span className="dp-history-text">
                   <span className="dp-history-question">{item.question}</span>
                   <span className="dp-history-meta">{describeHistoryItem(item)}</span>
                 </span>
                 <span className="dp-history-side">
-                  {/* Shown from the list's saved_report_id only; saving is not part of this page. */}
-                  {item.saved_report_id && <span className="dp-saved-pill">Saved</span>}
+                  {/* From the list's saved_report_id, or a save made since the list was loaded. */}
+                  {(item.saved_report_id || isSaved(item.id)) && <span className="dp-saved-pill">Saved</span>}
                   <time dateTime={timestamp ? timestamp.toISOString() : undefined}>{time}</time>
                 </span>
               </button>
@@ -235,7 +247,8 @@ function BackButton({ backRef, onBack }) {
  * A reopened analysis: the stored snapshot in the same ResultView as a fresh answer. The page and
  * its Back button stay the same element from loading to loaded, so keyboard focus stays on it.
  */
-function AnalysisDetail({ detail, backRef, onBack, onRetry }) {
+function AnalysisDetail({ detail, backRef, onBack, onRetry, isSaved, onSaveReport }) {
+  const analysis = detail.analysis
   return (
     <>
       {detail.status === 'loading' && <PageBar />}
@@ -244,7 +257,19 @@ function AnalysisDetail({ detail, backRef, onBack, onRetry }) {
         {detail.status === 'loading' ? (
           <PageSkeleton label="Opening analysis…" variant="result" />
         ) : detail.status === 'ready' ? (
-          <ResultView result={detail.analysis} />
+          <ResultView
+            result={analysis}
+            actions={
+              onSaveReport && (
+                <SaveReportAction
+                  analysisId={analysis.id}
+                  question={analysis.question}
+                  saved={Boolean(analysis.saved_report) || isSaved(analysis.id)}
+                  onSave={onSaveReport}
+                />
+              )
+            }
+          />
         ) : (
           <ErrorMessage title={detail.error.title} message={detail.error.message} tone={detail.error.tone}>
             {detail.error.retry && (

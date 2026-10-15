@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.jsx'
+import { stubFetch } from './test/fetch.js'
 import ResultView from './components/ResultView.jsx'
 import { QUICK_QUESTIONS } from './config/askContent.js'
 
@@ -49,7 +50,7 @@ let fetchMock
 
 beforeEach(() => {
   fetchMock = vi.fn()
-  vi.stubGlobal('fetch', fetchMock)
+  stubFetch(fetchMock)
 })
 
 afterEach(() => {

@@ -73,6 +73,13 @@ export function groupHistory(items, now) {
 
 const KIND_LABELS = { kpi: 'KPI', line: 'Line chart', bar: 'Bar chart', table: 'Table' }
 
+const KIND_ICONS = { kpi: 'target', line: 'trend', bar: 'chart', table: 'table', other: 'chat' }
+
+/** The Icon name for a result type's chip. */
+export function kindIcon(type) {
+  return KIND_ICONS[historyKind(type)]
+}
+
 /** 'kpi' | 'line' | 'bar' | 'table', or 'other' for anything else. */
 export function historyKind(type) {
   return Object.hasOwn(KIND_LABELS, type) ? type : 'other'

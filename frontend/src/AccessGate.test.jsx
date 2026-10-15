@@ -37,7 +37,8 @@ function route(path, handler) {
 
 beforeEach(() => {
   sessionStorage.clear()
-  routes = {}
+  // The signed-in app reads the saved-reports list once for the sidebar count.
+  routes = { '/saved-reports?limit=50': () => respond(200, { items: [] }) }
   fetchMock = vi.fn((url, options) => {
     const handler = routes[url.replace(API_BASE_URL, '')]
     if (!handler) throw new Error(`unexpected request to ${url}`)

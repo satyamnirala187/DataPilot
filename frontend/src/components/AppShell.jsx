@@ -12,11 +12,12 @@ const NAV_ITEMS = [
 /**
  * The signed-in frame: sidebar (logo, navigation, profile, Log out), top bar and the page's one
  * <main>. It holds no state: App owns the current view and passes the actions in.
+ * savedBadge: the Saved Reports count to show ("3", "50+"), or null for none.
  */
-export default function AppShell({ view, onNavigate, onAskAnother, showAskAnother = true, onLogout, children }) {
+export default function AppShell({ view, onNavigate, onAskAnother, showAskAnother = true, onLogout, savedBadge = null, children }) {
   return (
     <div className="dp-shell">
-      <Sidebar view={view} onNavigate={onNavigate} onLogout={onLogout} />
+      <Sidebar view={view} onNavigate={onNavigate} onLogout={onLogout} savedBadge={savedBadge} />
       <div className="dp-shell-body">
         <TopBar onAskAnother={onAskAnother} showAskAnother={showAskAnother} />
         <main className="dp-shell-main">{children}</main>
@@ -25,7 +26,7 @@ export default function AppShell({ view, onNavigate, onAskAnother, showAskAnothe
   )
 }
 
-function Sidebar({ view, onNavigate, onLogout }) {
+function Sidebar({ view, onNavigate, onLogout, savedBadge }) {
   return (
     <div className="dp-sidebar">
       <div className="dp-sidebar-logo">
@@ -49,6 +50,12 @@ function Sidebar({ view, onNavigate, onLogout }) {
                 >
                   <Icon name={item.icon} size={20} strokeWidth={1.7} />
                   {item.label}
+                  {/* Visual only, so the button is still announced as "Saved Reports". */}
+                  {item.view === 'saved' && savedBadge && (
+                    <span className="dp-nav-badge" aria-hidden="true">
+                      {savedBadge}
+                    </span>
+                  )}
                 </button>
               </li>
             )

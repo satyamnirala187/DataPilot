@@ -2,6 +2,7 @@ import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.jsx'
+import { stubFetch } from './test/fetch.js'
 
 // History through the page, with a mocked API: no backend, Gemini or database calls. The clock is
 // fixed (Thu 15 Oct 2026, 10:00 local) and every timestamp is built in local time, so grouping
@@ -45,12 +46,13 @@ const FRESH = {
 }
 
 let fetchMock
+let savedListMock
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(local(2026, 9, 15, 10, 0))
   fetchMock = vi.fn()
-  vi.stubGlobal('fetch', fetchMock)
+  savedListMock = stubFetch(fetchMock)
 })
 
 afterEach(() => {
@@ -123,8 +125,9 @@ describe('opening History', () => {
     await user.click(navButton('History'))
     await screen.findByRole('heading', { level: 1, name: 'History' })
     expect(calls('GET', '/history')).toHaveLength(2)
-    // Saved Reports is still a placeholder: nothing else was requested.
+    // Nothing else was requested; Saved Reports read only its own list (on opening and on its page).
     expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(savedListMock).toHaveBeenCalledTimes(2)
   })
 })
 
