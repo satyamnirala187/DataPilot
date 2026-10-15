@@ -343,7 +343,7 @@ describe('questions while signed in', () => {
     const user = userEvent.setup()
     await signedIn(user)
     await ask(user)
-    expect(await screen.findByRole('heading', { name: 'Answer' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Data' })).toBeInTheDocument()
     expect(calls('/query')[0][1].headers.Authorization).toBe(`Bearer ${TOKEN}`)
   })
 

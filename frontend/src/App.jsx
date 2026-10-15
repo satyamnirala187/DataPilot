@@ -3,12 +3,9 @@ import AnalysisProgress from './components/AnalysisProgress.jsx'
 import AppShell from './components/AppShell.jsx'
 import AskHome from './components/AskHome.jsx'
 import ErrorMessage from './components/ErrorMessage.jsx'
-import Icon from './components/Icon.jsx'
-import InsightCard from './components/InsightCard.jsx'
 import QuestionForm from './components/QuestionForm.jsx'
-import ResultsTable from './components/ResultsTable.jsx'
-import SqlViewer from './components/SqlViewer.jsx'
-import Visualization from './components/Visualization.jsx'
+import QuestionHeader from './components/QuestionHeader.jsx'
+import ResultView from './components/ResultView.jsx'
 import { SessionExpiredError, postQuery } from './services/api.js'
 
 // Statuses that mean "try again shortly" are shown as a calm warning, not as a failure.
@@ -64,6 +61,9 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
         title: err.title || 'Unexpected error',
         message: err.title ? err.message : 'Something went wrong. Please try again.',
         tone: err.title && TEMPORARY_STATUSES.has(err.status ?? null) ? 'warning' : 'error',
+        // The backend's error code word (e.g. unsafe_sql), and the question the error belongs to.
+        code: err.code ?? null,
+        question: trimmed,
       })
     } finally {
       inFlight.current = false
@@ -125,8 +125,8 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
  * The Ask page, in one of three states:
  *   no question yet    the V2 home: greeting, question box, quick questions
  *   waiting            the V2 analysis progress for the question that was sent
- *   answer or error    still the pre-V2 answer (redesigned in a later batch), with the question
- *                      box above it for the next question
+ *   answer or error    the V2 answer (ResultView) or error card, with the question box above
+ *                      it for the next question
  */
 function AskPage({ question, onQuestionChange, onSubmit, onQuickQuestion, questionRef, loading, validationError, result, error }) {
   const formProps = { question, onQuestionChange, onSubmit, loading, validationError, inputRef: questionRef }
@@ -139,7 +139,7 @@ function AskPage({ question, onQuestionChange, onSubmit, onQuickQuestion, questi
       {loading ? (
         <AnalysisProgress question={question.trim()} />
       ) : result || error ? (
-        <AnswerPage formProps={formProps} result={result} error={error} />
+        <AnswerPage formProps={formProps} result={result} error={error} onTryQuestion={onQuickQuestion} />
       ) : (
         <AskHome onAsk={onQuickQuestion} {...formProps} />
       )}
@@ -147,44 +147,28 @@ function AskPage({ question, onQuestionChange, onSubmit, onQuickQuestion, questi
   )
 }
 
-/** The answer or error, still the pre-V2 components, unchanged. */
-function AnswerPage({ formProps, result, error }) {
+/**
+ * The answer or the error for the last question, below a compact question box for the next one.
+ * A stopped question's "Try instead" questions are asked like quick questions.
+ */
+function AnswerPage({ formProps, result, error, onTryQuestion }) {
   return (
-    <div className="dp-legacy-page">
-      <div className="container main">
-        <QuestionForm {...formProps} />
-
-        <section className="results" aria-label="Answer">
-          {error && <ErrorMessage title={error.title} message={error.message} tone={error.tone} />}
-
-          {result && (
-            <>
-              <div className="results-heading">
-                <h2>Answer</h2>
-                <p className="results-question">{result.question}</p>
-              </div>
-              {/* No rows means nothing to summarise, so no insight is expected. */}
-              {result.rows.length > 0 && <InsightCard insight={result.insight} />}
-              <Visualization visualization={result.visualization} columns={result.columns} rows={result.rows} />
-              {/* The table is always shown; the chart only complements it. */}
-              <ResultsTable
-                columns={result.columns}
-                rows={result.rows}
-                rowCount={result.row_count ?? result.rows.length}
-                truncated={result.truncated}
-              />
-              <SqlViewer sql={result.sql} />
-            </>
-          )}
-        </section>
-      </div>
-
-      <footer className="container">
-        <p className="footer">
-          <Icon name="shield" size={14} />
-          Read-only by design: every generated query is validated and runs with a read-only database role.
-        </p>
-      </footer>
+    <div className="dp-page dp-page-result">
+      <QuestionForm {...formProps} compact />
+      {result ? (
+        <ResultView result={result} />
+      ) : (
+        <div className="dp-result">
+          <QuestionHeader question={error.question} />
+          <ErrorMessage
+            title={error.title}
+            message={error.message}
+            tone={error.tone}
+            code={error.code}
+            onTryQuestion={onTryQuestion}
+          />
+        </div>
+      )}
     </div>
   )
 }

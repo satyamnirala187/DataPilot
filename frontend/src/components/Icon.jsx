@@ -20,6 +20,9 @@ const PATHS = {
   eyeOff: 'M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0zM4 4l16 16',
   logout: 'M9 4H5v16h4M16 8l4 4-4 4M20 12H9',
   arrowRight: 'M5 12h14M13 6l6 6-6 6',
+  bulb: 'M9.5 17.5h5M10.5 20.5h3M12 3.5a5.5 5.5 0 0 0-3.3 9.9c.7.5 1.1 1.3 1.1 2.1v.5h4.4v-.5c0-.8.4-1.6 1.1-2.1A5.5 5.5 0 0 0 12 3.5z',
+  chevronDown: 'M6 9l6 6 6-6',
+  search: 'M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0zM16 16l4.5 4.5',
 }
 
 export default function Icon({ name, size = 18, strokeWidth = 2, className = '' }) {

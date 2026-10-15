@@ -2,7 +2,10 @@
 // The rules are conservative: ₹ only for money-like column names, % only for percentage names.
 
 const MONEY_WORDS = new Set(['revenue', 'profit', 'sales', 'spending', 'spend', 'spent', 'amount', 'aov', 'price', 'cost'])
-const PERCENT_WORDS = new Set(['pct', 'percent', 'percentage'])
+// A margin is a percentage: profit_margin 23.4 reads 23.4%. The value is shown as returned, never
+// multiplied or divided (0.234 reads 0.23%). Percent words are checked before money words, so
+// profit_margin is a percent while profit and gross_profit stay currency.
+const PERCENT_WORDS = new Set(['pct', 'percent', 'percentage', 'margin'])
 // Counts and ratios are never money, even when the name also mentions revenue (revenue_growth_rate).
 const NOT_MONEY_WORDS = new Set(['count', 'quantity', 'units', 'rate', 'ratio', 'share', 'growth'])
 
@@ -59,15 +62,21 @@ export function formatAxisValue(column, value) {
   return `${sign}${compact}`
 }
 
-// ISO dates are read as UTC so the shown day never shifts with the viewer's time zone.
+// ISO dates are read as UTC so the shown day never shifts with the viewer's time zone. A date that
+// does not exist (2026-13-45, 2026-02-30) is not a date: it is shown as returned, never rolled over.
 function parseIsoDate(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value))
   if (!match) return null
-  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
-  return Number.isNaN(date.getTime()) ? null : date
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])]
+  const date = new Date(Date.UTC(year, month - 1, day))
+  const exists = date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+  return exists ? date : null
 }
 
-/** 'Apr 2026' when every point is the first of a month, otherwise '12 Apr 2026'. */
+/**
+ * 'Apr 2026' when every point is the first of a month, otherwise '12 Apr 2026'. September is
+ * always 'Sep' (newer ICU versions write 'Sept' for en-GB).
+ */
 export function dateFormatter(values) {
   const monthly = values.every((value) => /^\d{4}-\d{2}-01/.test(String(value)))
   const options = monthly
@@ -75,7 +84,7 @@ export function dateFormatter(values) {
     : { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }
   return (value) => {
     const date = parseIsoDate(value)
-    return date ? date.toLocaleDateString('en-GB', options) : String(value)
+    return date ? date.toLocaleDateString('en-GB', options).replace('Sept', 'Sep') : String(value)
   }
 }
 

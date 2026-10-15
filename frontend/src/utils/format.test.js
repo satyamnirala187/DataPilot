@@ -28,6 +28,15 @@ describe('valueKind', () => {
     ['units_sold', 'number'],
     ['revenue_growth_rate', 'number'],
     ['revenue_share', 'number'],
+    ['profit_margin', 'percent'],
+    ['gross_margin', 'percent'],
+    ['operating_margin', 'percent'],
+    ['net_margin', 'percent'],
+    ['margin', 'percent'],
+    ['margin_pct', 'percent'],
+    ['profit', 'currency'],
+    ['gross_profit', 'currency'],
+    ['marginal_cost', 'currency'], // whole words only: "marginal" is not "margin"
     ['cancelled_pct', 'percent'],
     ['revenue_percentage', 'percent'],
     ['year', 'number'],
@@ -70,9 +79,15 @@ describe('labels and dates', () => {
 
   it('shows months for first-of-month dates and full dates otherwise', () => {
     expect(dateFormatter(['2026-04-01', '2026-05-01'])('2026-04-01')).toBe('Apr 2026')
-    // Month abbreviations differ slightly between ICU versions (Sep / Sept).
-    expect(dateFormatter(['2026-09-01', '2026-09-15'])('2026-09-15')).toMatch(/^15 Sept? 2026$/)
-    expect(dateFormatter(['2026-09-01T10:00:00'])('2026-09-01T10:00:00')).toMatch(/^Sept? 2026$/)
+    // ICU versions differ (Sep / Sept); the app always writes Sep.
+    expect(dateFormatter(['2026-09-01', '2026-09-15'])('2026-09-15')).toBe('15 Sep 2026')
+    expect(dateFormatter(['2026-09-01T10:00:00'])('2026-09-01T10:00:00')).toBe('Sep 2026')
+  })
+
+  it('shows a date that does not exist as returned, never rolled over to another date', () => {
+    expect(dateFormatter(['2026-13-45'])('2026-13-45')).toBe('2026-13-45')
+    expect(dateFormatter(['2026-02-30'])('2026-02-30')).toBe('2026-02-30')
+    expect(dateFormatter(['2028-02-29'])('2028-02-29')).toBe('29 Feb 2028')
   })
 
   it('shortens long category labels', () => {

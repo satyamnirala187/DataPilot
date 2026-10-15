@@ -7,9 +7,10 @@ const PLACEHOLDER_INTERVAL_MS = 3600
 
 /**
  * The question box: a textarea and the Ask button. Enter asks; Shift+Enter adds a new line.
- * inputRef lets the top bar's "Ask another question…" move the cursor here.
+ * inputRef lets the top bar's "Ask another question…" move the cursor here. compact is the one-line
+ * box above an answer.
  */
-export default function QuestionForm({ question, onQuestionChange, onSubmit, loading, validationError, inputRef }) {
+export default function QuestionForm({ question, onQuestionChange, onSubmit, loading, validationError, inputRef, compact = false }) {
   const [focused, setFocused] = useState(false)
   const placeholder = useCyclingPlaceholder(!focused && !question && !loading)
 
@@ -27,7 +28,7 @@ export default function QuestionForm({ question, onQuestionChange, onSubmit, loa
   }
 
   return (
-    <form className="dp-query" onSubmit={handleSubmit} aria-busy={loading}>
+    <form className={compact ? 'dp-query dp-query-compact' : 'dp-query'} onSubmit={handleSubmit} aria-busy={loading}>
       <div className="dp-query-box" data-invalid={validationError ? true : undefined}>
         <label htmlFor="question" className="visually-hidden">
           Your question
@@ -36,7 +37,7 @@ export default function QuestionForm({ question, onQuestionChange, onSubmit, loa
           id="question"
           ref={inputRef}
           name="question"
-          rows={3}
+          rows={compact ? 1 : 3}
           maxLength={MAX_QUESTION_LENGTH}
           placeholder={placeholder}
           value={question}

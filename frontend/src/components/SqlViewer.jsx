@@ -1,8 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import Icon from './Icon.jsx'
 
-/** Shows the validated SQL exactly as the backend ran it. It is display-only. */
+/**
+ * The SQL card: closed by default, opened with its header button. Shows the validated SQL exactly
+ * as the backend ran it, as plain text; it is never run or changed here.
+ */
 export default function SqlViewer({ sql }) {
+  const id = useId()
+  const [open, setOpen] = useState(false)
   const [copyState, setCopyState] = useState('idle') // idle | copied | failed
 
   useEffect(() => {
@@ -21,23 +26,31 @@ export default function SqlViewer({ sql }) {
   }
 
   return (
-    <section className="card sql-card" aria-labelledby="sql-heading">
-      <div className="card-header">
-        <div>
-          <h2 id="sql-heading" className="card-title">
-            <Icon name="code" size={16} />
-            Generated SQL
-          </h2>
-          <p className="card-caption">The validated, read-only query that produced this answer.</p>
-        </div>
-        <button type="button" className="secondary-button" onClick={copy}>
+    <section className="dp-card dp-sql" aria-labelledby={`${id}-title`}>
+      <h2 className="dp-sql-heading">
+        <button
+          type="button"
+          className="dp-sql-toggle"
+          aria-expanded={open}
+          aria-controls={`${id}-panel`}
+          onClick={() => setOpen((current) => !current)}
+        >
+          <span id={`${id}-title`} className="dp-sql-title">
+            SQL query
+          </span>
+          <span className="dp-sql-note">Read-only, validated before running</span>
+          <Icon name="chevronDown" size={18} className="dp-sql-chevron" />
+        </button>
+      </h2>
+      <div id={`${id}-panel`} className="dp-sql-panel" hidden={!open}>
+        <button type="button" className="dp-copy" onClick={copy}>
           <Icon name={copyState === 'copied' ? 'check' : 'copy'} size={14} />
           {copyState === 'copied' ? 'Copied' : copyState === 'failed' ? 'Copy failed' : 'Copy SQL'}
         </button>
+        <pre className="dp-sql-code">
+          <code>{sql}</code>
+        </pre>
       </div>
-      <pre className="sql-block">
-        <code>{sql}</code>
-      </pre>
     </section>
   )
 }

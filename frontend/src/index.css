@@ -171,6 +171,17 @@
   --dp-query-border: rgba(197, 206, 226, 0.75);
   --dp-border-control: #dce2ee; /* unfilled step rings, outline buttons */
 
+  /* Result (values from the approved App reference) */
+  --dp-hero-text: #ffffff;
+  --dp-hero-pill: rgba(255, 255, 255, 0.16); /* range pill on the hero card */
+  --dp-hero-pill-strong: rgba(255, 255, 255, 0.2); /* change pill on the hero card */
+  --dp-hero-area: rgba(255, 255, 255, 0.1); /* soft fill under the hero line */
+  --dp-text-tile: #2a3558; /* tile labels, error explanation */
+  --dp-table-divider: #ebeff8; /* Data table rows */
+  --dp-sql-hover: #fafbfe;
+  --dp-radius-mini-tile: 14px; /* "Try instead" questions */
+  --dp-shadow-tooltip: 0 10px 28px -10px rgba(14, 26, 54, 0.35);
+
   /* App shell (values from the approved App reference) */
   --dp-surface-hover: #f6f8fc; /* nav and quiet-button hover */
   --dp-avatar-bg: #e0e8fa;
@@ -1778,7 +1789,7 @@ tbody tr:last-child td {
 }
 
 /* --- UI V2: Ask page (home, question box, quick questions, analysis progress) ---------------------
-   The answer itself is still the pre-V2 UI until the Result batch. */
+   The answer and error below the question box are styled in the Result section. */
 
 .dp-page {
   width: 100%;
@@ -2061,6 +2072,654 @@ tbody tr:last-child td {
 
   .dp-analysis {
     padding: 22px 20px;
+  }
+}
+
+/* --- UI V2: Result (answer, summary tiles, hero card, insight, data, SQL, errors) ---------------
+   Every number on these cards comes from the result's own rows (utils/result.js). */
+
+/* The one-line question box above an answer. */
+.dp-query-compact .dp-query-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 20px;
+}
+
+.dp-query-compact textarea {
+  flex: 1;
+  min-width: 0;
+  max-height: 7.5em;
+  font-size: var(--dp-text-body-lg);
+  field-sizing: content; /* grows with a long question where supported */
+}
+
+.dp-query-compact .dp-query-actions {
+  flex: none;
+  margin-top: 0;
+}
+
+.dp-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dp-gap-cards);
+  min-width: 0;
+}
+
+.dp-result .dp-question-header {
+  margin-bottom: 8px;
+}
+
+.dp-result-headline {
+  margin-top: 10px;
+  font-size: var(--dp-text-body-lg);
+  font-weight: var(--dp-weight-light);
+  line-height: var(--dp-leading-body);
+  color: var(--dp-ink-2);
+}
+
+/* Row 1: summary tiles beside the hero card; stacked when there is no room for both. */
+.dp-result-top {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr));
+  gap: var(--dp-gap-cards);
+}
+
+.dp-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: var(--dp-gap-tiles);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dp-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 140px;
+  padding: 20px 20px 18px;
+  border-radius: var(--dp-radius-tile);
+  background: var(--dp-peach);
+  --dp-tile-note: var(--dp-peach-text);
+}
+
+.dp-tile:nth-child(2) {
+  background: var(--dp-mint);
+  --dp-tile-note: var(--dp-mint-text);
+}
+
+.dp-tile:nth-child(3) {
+  background: var(--dp-blue);
+  --dp-tile-note: var(--dp-blue-text);
+}
+
+.dp-tile:nth-child(4) {
+  background: var(--dp-sage);
+  --dp-tile-note: var(--dp-sage-text);
+}
+
+/* An odd last tile takes the full row instead of leaving a gap. */
+.dp-tile:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.dp-tile-label {
+  font-size: var(--dp-text-body-sm);
+  color: var(--dp-text-tile);
+}
+
+.dp-tile-value {
+  font-size: var(--dp-text-kpi);
+  font-weight: var(--dp-weight-medium);
+  line-height: 1.2;
+  letter-spacing: var(--dp-tracking-title);
+  color: var(--dp-ink);
+  overflow-wrap: anywhere;
+}
+
+.dp-tile-note {
+  margin-top: auto;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--dp-tile-note);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The blue hero card: KPI value or chart. */
+.dp-hero {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 22px 24px 16px;
+  border-radius: var(--dp-radius-card);
+  background: var(--dp-hero);
+  box-shadow: var(--dp-shadow-hero);
+  color: var(--dp-hero-text);
+}
+
+.dp-hero-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dp-hero-title {
+  min-width: 0;
+  font-size: var(--dp-text-xl);
+  font-weight: var(--dp-weight-medium);
+}
+
+.dp-hero-pill {
+  flex: none;
+  padding: 5px 11px;
+  border-radius: var(--dp-radius-pill);
+  background: var(--dp-hero-pill);
+  font-size: var(--dp-text-label);
+  white-space: nowrap;
+}
+
+.dp-hero-figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.dp-hero-value {
+  font-size: 18px;
+  font-weight: var(--dp-weight-medium);
+}
+
+.dp-hero-note {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 3px 9px;
+  border-radius: var(--dp-radius-sm);
+  background: var(--dp-hero-pill-strong);
+  font-size: var(--dp-text-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dp-hero-chart {
+  min-width: 0;
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.dp-hero-chart svg {
+  overflow: visible;
+}
+
+.dp-hero-kpi {
+  justify-content: center;
+  min-height: 200px;
+  padding: 28px 30px;
+}
+
+.dp-hero-kpi-value {
+  margin-top: 10px;
+  font-size: 52px;
+  font-weight: var(--dp-weight-medium);
+  line-height: 1.05;
+  letter-spacing: var(--dp-tracking-headline);
+  overflow-wrap: anywhere;
+}
+
+.dp-hero-kpi-exact {
+  margin-top: 12px;
+  font-size: var(--dp-text-body);
+  color: var(--dp-hero-axis);
+  font-variant-numeric: tabular-nums;
+}
+
+.dp-chart-tooltip {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--dp-surface);
+  box-shadow: var(--dp-shadow-tooltip);
+  color: var(--dp-ink);
+  font-family: var(--dp-font-sans);
+  font-size: var(--dp-text-table-head);
+}
+
+.dp-chart-tooltip-label {
+  color: var(--dp-text-muted);
+}
+
+.dp-chart-tooltip-value {
+  margin-top: 2px;
+  font-weight: var(--dp-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Row 2: the insight beside the Data card; one column for wider tables. */
+.dp-result-evidence {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+  align-items: start;
+  gap: var(--dp-gap-cards);
+}
+
+.dp-result-evidence-stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.dp-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dp-card-title {
+  font-size: var(--dp-text-card-title);
+  font-weight: var(--dp-weight-medium);
+  color: var(--dp-ink);
+}
+
+.dp-icon-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--dp-radius-control);
+  background: var(--dp-blue);
+  color: var(--dp-blue-text);
+}
+
+.dp-insight {
+  min-width: 0;
+  padding: var(--dp-card-padding);
+}
+
+.dp-insight-text {
+  margin-top: 16px;
+  font-size: var(--dp-text-body);
+  font-weight: var(--dp-weight-light);
+  line-height: var(--dp-leading-relaxed);
+  color: var(--dp-ink-2);
+}
+
+.dp-insight-unavailable {
+  color: var(--dp-text-muted);
+}
+
+.dp-insight-meta {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--dp-border);
+  font-size: var(--dp-text-table-head);
+  color: var(--dp-text-muted);
+}
+
+.dp-data {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dp-data-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 22px 24px 14px;
+}
+
+.dp-data-count {
+  font-size: var(--dp-text-table-head);
+  color: var(--dp-text-muted);
+  white-space: nowrap;
+}
+
+.dp-data-note {
+  margin: 0 24px 14px;
+  padding: 10px 14px;
+  border-radius: var(--dp-radius-control);
+  background: var(--dp-peach);
+  color: var(--dp-peach-text);
+  font-size: 14px;
+  line-height: var(--dp-leading-body);
+}
+
+/* A wide table scrolls inside the card, never the page. */
+.dp-table-scroll {
+  overflow-x: auto;
+  border-top: 1px solid var(--dp-border-field);
+}
+
+.dp-table-scroll:focus-visible {
+  outline: 2px solid var(--dp-accent);
+  outline-offset: -2px;
+}
+
+/* Overrides the legacy global table rules (header fill, stripes, hover tint). */
+.dp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14.5px;
+  color: var(--dp-ink-2);
+}
+
+.dp-table th,
+.dp-table td {
+  padding: 12px 16px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.dp-table th:first-child,
+.dp-table td:first-child {
+  padding-left: 24px;
+}
+
+.dp-table th:last-child,
+.dp-table td:last-child {
+  padding-right: 24px;
+}
+
+.dp-table th {
+  border-bottom: 1px solid var(--dp-border-field);
+  background: transparent;
+  color: var(--dp-text-subtle);
+  font-size: var(--dp-text-table-head);
+  font-weight: var(--dp-weight-regular);
+  letter-spacing: 0;
+}
+
+.dp-table td {
+  border-bottom: 1px solid var(--dp-table-divider);
+}
+
+/* Text can be long (names, notes): it wraps instead of stretching the table without end. */
+.dp-table td:not(.dp-num) {
+  min-width: 120px;
+  max-width: 420px;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.dp-table td:first-child {
+  font-weight: var(--dp-weight-medium);
+  color: var(--dp-ink);
+}
+
+.dp-table tbody tr:nth-child(even) {
+  background: transparent;
+}
+
+.dp-table tbody tr:hover {
+  background: var(--dp-surface-hover);
+}
+
+.dp-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.dp-table .dp-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.dp-null {
+  color: var(--dp-text-subtle);
+  font-style: italic;
+}
+
+/* The SQL card: a header button that opens the query. */
+.dp-sql {
+  overflow: hidden;
+}
+
+.dp-sql-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 18px 24px;
+  border: 0;
+  background: transparent;
+  color: var(--dp-ink);
+  font-family: inherit;
+  text-align: left;
+  transition: background var(--dp-duration-fast);
+}
+
+.dp-sql-toggle:hover {
+  background: var(--dp-sql-hover);
+}
+
+.dp-sql-toggle:focus-visible {
+  outline: 2px solid var(--dp-accent);
+  outline-offset: -2px;
+  border-radius: var(--dp-radius-card);
+}
+
+.dp-sql-title {
+  flex: none;
+  font-size: var(--dp-text-body-lg);
+  font-weight: var(--dp-weight-medium);
+}
+
+.dp-sql-note {
+  min-width: 0;
+  font-size: var(--dp-text-table-head);
+  font-weight: var(--dp-weight-regular);
+  color: var(--dp-text-muted);
+}
+
+.dp-sql-toggle .dp-sql-chevron {
+  flex: none;
+  margin-left: auto;
+  color: var(--dp-text-muted);
+  transition: transform var(--dp-duration-base);
+}
+
+.dp-sql-toggle[aria-expanded='true'] .dp-sql-chevron {
+  transform: rotate(180deg);
+}
+
+.dp-sql-panel {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--dp-border);
+  background: var(--dp-code-bg);
+}
+
+.dp-sql-panel[hidden] {
+  display: none;
+}
+
+.dp-copy {
+  display: inline-flex;
+  align-self: flex-end;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 16px 0;
+  padding: 6px 12px;
+  border: 1px solid var(--dp-border-control);
+  border-radius: var(--dp-radius-pill);
+  background: var(--dp-surface);
+  color: var(--dp-ink);
+  font-family: inherit;
+  font-size: var(--dp-text-table-head);
+  font-weight: var(--dp-weight-medium);
+}
+
+.dp-copy:hover {
+  border-color: var(--dp-accent);
+  color: var(--dp-accent);
+}
+
+.dp-sql-code {
+  margin: 0;
+  padding: 8px 24px 22px;
+  overflow-x: auto;
+  color: var(--dp-ink-2);
+  font-family: var(--dp-font-mono);
+  font-size: var(--dp-text-table-head);
+  line-height: var(--dp-leading-relaxed);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A successful question with no rows. */
+.dp-empty-result {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: var(--dp-card-padding);
+}
+
+.dp-empty-result-text {
+  margin-top: 4px;
+  font-size: var(--dp-text-body-sm);
+  font-weight: var(--dp-weight-light);
+  color: var(--dp-text-muted);
+}
+
+/* Error card. */
+.dp-error-card {
+  padding: 28px 30px;
+}
+
+.dp-error-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dp-error-chip {
+  width: 44px;
+  height: 44px;
+  background: var(--dp-error-bg);
+  color: var(--dp-error);
+}
+
+.dp-error-main[data-tone='warning'] .dp-error-chip {
+  background: var(--dp-peach);
+  color: var(--dp-peach-text);
+}
+
+.dp-error-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 20px;
+  font-weight: var(--dp-weight-medium);
+  color: var(--dp-ink);
+}
+
+.dp-error-text {
+  max-width: 680px;
+  margin-top: 14px;
+  font-size: var(--dp-text-body);
+  font-weight: var(--dp-weight-light);
+  line-height: 1.6;
+  color: var(--dp-text-tile);
+}
+
+.dp-try {
+  margin-top: 22px;
+}
+
+.dp-try-title {
+  font-size: var(--dp-text-body-sm);
+  font-weight: var(--dp-weight-medium);
+  color: var(--dp-ink);
+}
+
+.dp-try-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dp-try-item {
+  width: 100%;
+  height: 100%;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: var(--dp-radius-mini-tile);
+  background: var(--dp-peach);
+  color: var(--dp-ink);
+  font-family: inherit;
+  font-size: var(--dp-text-body-sm);
+  font-weight: var(--dp-weight-medium);
+  line-height: 1.35;
+  text-align: left;
+  transition: transform var(--dp-duration-fast);
+}
+
+.dp-try-list li:nth-child(2) .dp-try-item {
+  background: var(--dp-mint);
+}
+
+.dp-try-list li:nth-child(3) .dp-try-item {
+  background: var(--dp-blue);
+}
+
+.dp-try-list li:nth-child(4) .dp-try-item {
+  background: var(--dp-sage);
+}
+
+.dp-try-item:hover {
+  transform: translateY(-1px);
+}
+
+.dp-try-item:focus-visible {
+  outline: 2px solid var(--dp-accent);
+  outline-offset: 2px;
+}
+
+/* No approved narrow layout yet: keep the result readable and inside the window. */
+@media (max-width: 720px) {
+  .dp-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dp-tile {
+    min-height: 0;
+  }
+
+  .dp-tile-note {
+    margin-top: 4px;
+  }
+
+  .dp-hero,
+  .dp-hero-kpi {
+    padding: 18px 16px 12px;
+  }
+
+  .dp-hero-kpi-value {
+    font-size: 36px;
+  }
+
+  .dp-hero-head {
+    flex-wrap: wrap;
+  }
+
+  .dp-table th,
+  .dp-table td {
+    padding: 10px 12px;
+  }
+
+  .dp-error-card {
+    padding: 22px 20px;
+  }
+
+  .dp-sql-toggle {
+    flex-wrap: wrap;
   }
 }
 

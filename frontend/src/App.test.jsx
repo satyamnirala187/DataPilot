@@ -53,8 +53,8 @@ describe('DataPilot page', () => {
     expect(screen.getByText('What would you like to know today?')).toBeInTheDocument()
 
     await ask(user, 'What are the top 2 categories by revenue?')
-    expect(await screen.findByRole('heading', { name: 'Answer' })).toBeInTheDocument()
-    expect(screen.getByText(SUCCESS.question, { selector: 'p' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Data' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: SUCCESS.question })).toBeInTheDocument()
     expect(screen.queryByText('What would you like to know today?')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Quick questions' })).not.toBeInTheDocument()
   })
@@ -69,7 +69,7 @@ describe('DataPilot page', () => {
     expect(url).toMatch(/\/query$/)
     expect(options.method).toBe('POST')
     expect(JSON.parse(options.body)).toEqual({ question: 'Who are our top customers?' })
-    await screen.findByRole('heading', { name: 'Answer' })
+    await screen.findByRole('heading', { name: 'Data' })
     // The question stays in the box, as if it had been typed.
     expect(screen.getByLabelText('Your question')).toHaveValue('Who are our top customers?')
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -92,14 +92,14 @@ describe('DataPilot page', () => {
     render(<App />)
     await ask(user, '  What are the top 2 categories by revenue?  ')
 
-    expect(await screen.findByRole('columnheader', { name: 'category' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'revenue' })).toBeInTheDocument()
+    expect(await screen.findByRole('columnheader', { name: 'Category' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Revenue' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Electronics' })).toBeInTheDocument()
-    expect(screen.getByRole('cell', { name: '4012345.25' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '₹40,12,345.25' })).toBeInTheDocument()
     expect(screen.getAllByRole('row')).toHaveLength(3) // header + 2 rows
-    expect(screen.getByText('2 rows')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Generated SQL' })).toBeInTheDocument()
-    expect(screen.getByText(SUCCESS.sql)).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Data' })).getByText('2 rows')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /SQL query/ }))
+    expect(screen.getByText(SUCCESS.sql)).toBeVisible()
 
     const [url, options] = fetchMock.mock.calls[0]
     expect(url).toMatch(/\/query$/)
@@ -131,7 +131,7 @@ describe('DataPilot page', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     finish(new Response(JSON.stringify(SUCCESS), { status: 200 }))
-    expect(await screen.findByRole('heading', { name: 'Answer' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Data' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Ask' })).toBeEnabled()
     expect(screen.getByRole('status')).toHaveTextContent('')
     expect(screen.queryByRole('heading', { name: 'Analyzing your question' })).not.toBeInTheDocument()
@@ -152,7 +152,7 @@ describe('DataPilot page', () => {
   })
 
   it.each([
-    [400, 'unsafe_sql', 'Question not accepted'],
+    [400, 'invalid_question', 'Question not accepted'],
     [429, 'rate_limited', 'Too many requests'],
     [502, 'generation_failed', 'AI could not answer'],
     [504, 'query_timeout', 'Query timed out'],
@@ -207,7 +207,8 @@ describe('DataPilot page', () => {
     const user = userEvent.setup() // provides a test clipboard
     render(<App />)
     await ask(user, 'Revenue?')
-    await user.click(await screen.findByRole('button', { name: 'Copy SQL' }))
+    await user.click(await screen.findByRole('button', { name: /SQL query/ }))
+    await user.click(screen.getByRole('button', { name: 'Copy SQL' }))
     expect(await navigator.clipboard.readText()).toBe(SUCCESS.sql)
     expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument()
   })
@@ -218,7 +219,8 @@ describe('DataPilot page', () => {
     render(<App />)
     await ask(user, 'Revenue?')
     vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'))
-    await user.click(await screen.findByRole('button', { name: 'Copy SQL' }))
+    await user.click(await screen.findByRole('button', { name: /SQL query/ }))
+    await user.click(screen.getByRole('button', { name: 'Copy SQL' }))
     expect(await screen.findByRole('button', { name: 'Copy failed' })).toBeInTheDocument()
   })
 
@@ -248,7 +250,9 @@ describe('DataPilot page', () => {
     const user = userEvent.setup()
     render(<App />)
     await ask(user, 'Show every order.')
-    expect(await screen.findByText(/Results truncated: only the first 2 rows are shown\./)).toBeInTheDocument()
+    expect(
+      await screen.findByText('Only the first 2 rows are shown. The full result has more rows than DataPilot displays.'),
+    ).toBeInTheDocument()
   })
 
   it('renders a zero-row result cleanly', async () => {
@@ -257,10 +261,10 @@ describe('DataPilot page', () => {
     render(<App />)
     await ask(user, 'Orders from 1990?')
 
-    expect(await screen.findByText('The query ran successfully but returned no rows.')).toBeInTheDocument()
-    expect(screen.getByText('0 rows')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'No matching data was found for this question.' })).toBeInTheDocument()
+    expect(screen.getByText('The query ran successfully and returned 0 rows.')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
-    expect(screen.getByText(SUCCESS.sql)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /SQL query/ })).toBeInTheDocument()
   })
 
   it('clears the previous result and error when a new question starts', async () => {
@@ -353,14 +357,14 @@ describe('app shell', () => {
     const user = userEvent.setup()
     render(<App />)
     await ask(user, 'What are the top 2 categories by revenue?')
-    await screen.findByRole('heading', { name: 'Answer' })
+    await screen.findByRole('heading', { name: 'Data' })
     await user.type(screen.getByLabelText('Your question'), ' And by city?')
 
     await user.click(navButton('History'))
     await user.click(navButton('Saved Reports'))
     await user.click(navButton('Ask DataPilot'))
 
-    expect(screen.getByRole('heading', { name: 'Answer' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Data' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Electronics' })).toBeInTheDocument()
     expect(screen.getByLabelText('Your question')).toHaveValue('What are the top 2 categories by revenue? And by city?')
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -375,7 +379,7 @@ describe('app shell', () => {
     await user.click(navButton('History'))
     finish(new Response(JSON.stringify(SUCCESS), { status: 200 }))
     await user.click(navButton('Ask DataPilot'))
-    expect(await screen.findByRole('heading', { name: 'Answer' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Data' })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
@@ -405,11 +409,11 @@ describe('app shell', () => {
     const user = userEvent.setup()
     render(<App />)
     await ask(user, 'What are the top 2 categories by revenue?')
-    await screen.findByRole('heading', { name: 'Answer' })
+    await screen.findByRole('heading', { name: 'Data' })
 
     await user.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Ask another question…' }))
     expect(screen.getByLabelText('Your question')).toHaveFocus()
-    expect(screen.getByRole('heading', { name: 'Answer' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Data' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Electronics' })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
@@ -526,7 +530,7 @@ describe('Ask page V2', () => {
     await ask(user, 'Second question')
     expect(screen.getByRole('heading', { level: 1, name: 'Second question' })).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Answer' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Data' })).not.toBeInTheDocument()
     expect(screen.queryByText('Electronics')).not.toBeInTheDocument()
 
     finish(new Response(JSON.stringify({ ...SUCCESS, question: 'Second question' }), { status: 200 }))
@@ -562,7 +566,7 @@ describe('Ask page V2', () => {
 
     // The answer is shown as soon as it arrives, and the progress timers are gone.
     await act(async () => finish(new Response(JSON.stringify(SUCCESS), { status: 200 })))
-    expect(screen.getByRole('heading', { name: 'Answer' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Data' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Analyzing your question' })).not.toBeInTheDocument()
     expect(vi.getTimerCount()).toBe(0)
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -577,7 +581,7 @@ describe('Ask page V2', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
     act(() => vi.advanceTimersByTime(100))
     await act(async () => finish(new Response(JSON.stringify(SUCCESS), { status: 200 })))
-    expect(screen.getByRole('heading', { name: 'Answer' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Data' })).toBeInTheDocument()
     expect(vi.getTimerCount()).toBe(0)
   })
 
