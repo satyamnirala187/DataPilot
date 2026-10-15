@@ -3,6 +3,7 @@ import AnalysisProgress from './components/AnalysisProgress.jsx'
 import AppShell from './components/AppShell.jsx'
 import AskHome from './components/AskHome.jsx'
 import ErrorMessage from './components/ErrorMessage.jsx'
+import HistoryPage from './components/HistoryPage.jsx'
 import QuestionForm from './components/QuestionForm.jsx'
 import QuestionHeader from './components/QuestionHeader.jsx'
 import ResultView from './components/ResultView.jsx'
@@ -23,6 +24,8 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
   const [view, setView] = useState('ask')
   // Bumped by the top bar's "Ask another question…": once the Ask page is shown, focus the question.
   const [focusRequest, setFocusRequest] = useState(0)
+  // Bumped by the History button: if an analysis is open in History, it goes back to the list.
+  const [historyRequest, setHistoryRequest] = useState(0)
   const questionRef = useRef(null)
   const [question, setQuestion] = useState('')
   const [validationError, setValidationError] = useState(null)
@@ -82,6 +85,11 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
     handleSubmit(text)
   }
 
+  function handleNavigate(next) {
+    if (next === 'history') setHistoryRequest((count) => count + 1)
+    setView(next)
+  }
+
   function handleAskAnother() {
     setView('ask')
     setFocusRequest((count) => count + 1)
@@ -97,12 +105,14 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
   return (
     <AppShell
       view={view}
-      onNavigate={setView}
+      onNavigate={handleNavigate}
       onAskAnother={handleAskAnother}
       showAskAnother={!askHome}
       onLogout={onLogout}
     >
-      {view === 'history' && <ViewPlaceholder title="History" text="History will appear here." />}
+      {/* Shown only while open, so each visit loads the list again. Its reopened analyses never
+          replace the Ask page's question and answer below. */}
+      {view === 'history' && <HistoryPage listRequest={historyRequest} onSessionExpired={onSessionExpired} />}
       {view === 'saved' && <ViewPlaceholder title="Saved Reports" text="Saved reports will appear here." />}
       {view === 'ask' && (
         <AskPage

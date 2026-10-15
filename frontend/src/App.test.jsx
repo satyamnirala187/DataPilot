@@ -22,6 +22,16 @@ function jsonResponse(status, body) {
   return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
 }
 
+// The fetch calls to one API path, e.g. callsTo('/query').
+function callsTo(path) {
+  return fetchMock.mock.calls.filter(([url]) => new URL(url).pathname === path)
+}
+
+// /history answers with an empty list; every other path with body.
+function answerWith(body) {
+  fetchMock.mockImplementation((url) => (new URL(url).pathname === '/history' ? jsonResponse(200, { items: [] }) : jsonResponse(200, body)))
+}
+
 async function ask(user, question) {
   await user.type(screen.getByLabelText('Your question'), question)
   await user.click(screen.getByRole('button', { name: 'Ask' }))
@@ -330,13 +340,13 @@ describe('app shell', () => {
     expect(nav().textContent).not.toMatch(/\d/)
   })
 
-  it('switches to the History and Saved Reports placeholders and back, without any request', async () => {
+  it('switches to History and the Saved Reports placeholder and back, asking nothing', async () => {
+    answerWith(null)
     const user = userEvent.setup()
     render(<App />)
 
     await user.click(navButton('History'))
-    expect(screen.getByRole('heading', { level: 1, name: 'History' })).toBeInTheDocument()
-    expect(screen.getByText('History will appear here.')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'History' })).toBeInTheDocument()
     expect(navButton('History')).toHaveAttribute('aria-current', 'page')
     expect(navButton('Ask DataPilot')).not.toHaveAttribute('aria-current')
     expect(screen.queryByLabelText('Your question')).not.toBeInTheDocument()
@@ -349,11 +359,12 @@ describe('app shell', () => {
     await user.click(navButton('Ask DataPilot'))
     expect(screen.getByLabelText('Your question')).toBeInTheDocument()
     expect(navButton('Ask DataPilot')).toHaveAttribute('aria-current', 'page')
-    expect(fetchMock).not.toHaveBeenCalled()
+    // Only the History list was read; Saved Reports is still a placeholder and loads nothing.
+    expect(fetchMock.mock.calls.map(([url]) => new URL(url).pathname)).toEqual(['/history'])
   })
 
   it('keeps the answer and the typed question when moving between pages, without asking again', async () => {
-    fetchMock.mockReturnValue(jsonResponse(200, SUCCESS))
+    answerWith(SUCCESS)
     const user = userEvent.setup()
     render(<App />)
     await ask(user, 'What are the top 2 categories by revenue?')
@@ -367,12 +378,15 @@ describe('app shell', () => {
     expect(screen.getByRole('heading', { name: 'Data' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Electronics' })).toBeInTheDocument()
     expect(screen.getByLabelText('Your question')).toHaveValue('What are the top 2 categories by revenue? And by city?')
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(callsTo('/query')).toHaveLength(1)
+    expect(callsTo('/history')).toHaveLength(1)
   })
 
   it('lets a question that is still running finish while another page is open', async () => {
     let finish
-    fetchMock.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    fetchMock.mockImplementation((url) =>
+      new URL(url).pathname === '/history' ? jsonResponse(200, { items: [] }) : new Promise((resolve) => (finish = resolve)),
+    )
     const user = userEvent.setup()
     render(<App />)
     await ask(user, 'What are the top 2 categories by revenue?')
@@ -380,7 +394,7 @@ describe('app shell', () => {
     finish(new Response(JSON.stringify(SUCCESS), { status: 200 }))
     await user.click(navButton('Ask DataPilot'))
     expect(await screen.findByRole('heading', { name: 'Data' })).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(callsTo('/query')).toHaveLength(1)
   })
 
   it('"Ask another question…" opens the Ask page and focuses the question', async () => {

@@ -14,9 +14,10 @@ const CANNOT_RUN_TEXT =
  * A failed question. Shows only the safe title and message from the API client (or the fixed
  * wording above), never raw response details. tone "warning" is for temporary problems (rate
  * limit, service busy, timeout, offline). A stopped question also offers questions to try,
- * which are asked through the normal question path by onTryQuestion.
+ * which are asked through the normal question path by onTryQuestion. children: optional actions
+ * shown under the message (e.g. "Try again").
  */
-export default function ErrorMessage({ title, message, tone = 'error', code = null, onTryQuestion }) {
+export default function ErrorMessage({ title, message, tone = 'error', code = null, onTryQuestion, children }) {
   const cannotRun = CANNOT_RUN_CODES.has(code)
   return (
     <div className="dp-card dp-error-card">
@@ -29,6 +30,8 @@ export default function ErrorMessage({ title, message, tone = 'error', code = nu
         </div>
         <p className="dp-error-text">{cannotRun ? CANNOT_RUN_TEXT : message}</p>
       </div>
+
+      {children && <div className="dp-error-actions">{children}</div>}
 
       {cannotRun && onTryQuestion && (
         <div className="dp-try">

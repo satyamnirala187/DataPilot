@@ -23,6 +23,9 @@ const PATHS = {
   bulb: 'M9.5 17.5h5M10.5 20.5h3M12 3.5a5.5 5.5 0 0 0-3.3 9.9c.7.5 1.1 1.3 1.1 2.1v.5h4.4v-.5c0-.8.4-1.6 1.1-2.1A5.5 5.5 0 0 0 12 3.5z',
   chevronDown: 'M6 9l6 6 6-6',
   search: 'M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0zM16 16l4.5 4.5',
+  arrowLeft: 'M19 12H5M11 6l-6 6 6 6',
+  trend: 'M4 16l5-5 4 4 7-7M15 8h5v5',
+  target: 'M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0zM8 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0z',
 }
 
 export default function Icon({ name, size = 18, strokeWidth = 2, className = '' }) {
