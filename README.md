@@ -69,6 +69,9 @@ does not depend on external Gemini quota.
 - **Optional AI insight**: a one- or two-sentence summary of the returned rows; if it fails, the
   result is still shown.
 - **Visible SQL** for every answer, with a Copy SQL button.
+- **History and Saved Reports**: every answered question is recorded and can be reopened from its
+  stored result (no new AI call), and saved as a titled report. Reports cannot yet be exported,
+  renamed or deleted.
 - **Safe, structured errors** with friendly messages and no internal details.
 - **Private demo access**: one shared login, checked by the backend, before any question is answered.
 - **Per-client rate limiting** and a **global daily question cap** to protect the AI quota.

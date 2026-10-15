@@ -85,9 +85,23 @@ Then open `https://<service>.onrender.com/health`; it should return
 | Output directory | `dist` |
 | Environment variable | `VITE_API_BASE_URL=https://<service>.onrender.com` (no trailing slash) |
 
-No `vercel.json` is needed: the app is a single static page with no client-side routes or
-serverless functions. `VITE_API_BASE_URL` is compiled into the bundle, so it must be set before
-the build, and changing it needs a redeploy. It is public by design.
+`VITE_API_BASE_URL` is compiled into the bundle, so it must be set before the build, and changing
+it needs a redeploy. It is public by design.
+
+`frontend/vercel.json` only sets security headers on every response (the app is a single static
+page with no rewrites, client-side routes or serverless functions):
+
+- `Content-Security-Policy`: scripts, styles and images from the site itself; the Google Fonts
+  stylesheet (`fonts.googleapis.com`) and font files (`fonts.gstatic.com`); API calls only to the
+  Render API origin (`connect-src`); no plugins (`object-src 'none'`); and no framing by other
+  sites (`frame-ancestors 'none'`).
+- `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and a
+  `Permissions-Policy` that turns off camera, microphone, geolocation, payment and USB.
+
+**If the backend URL changes**, update both `VITE_API_BASE_URL` and the `connect-src` origin in
+`frontend/vercel.json`; otherwise the browser blocks every API call. HSTS is left to Vercel, which
+redirects HTTP to HTTPS: after a deploy, check that the site's responses carry
+`Strict-Transport-Security`, and revisit this if a custom domain is added.
 
 ## CORS
 
@@ -230,8 +244,8 @@ until you do.
 2. **Then push** the Phase 19 commits. Render deploys the new backend, which picks up
    `APP_DATABASE_URL` at startup.
 3. **The frontend needs no change**: no code and no environment variable. Vercel may rebuild the
-   same frontend on push; that is harmless. The current frontend ignores the new `analysis_id` field,
-   and there is no History or Saved Reports screen yet.
+   same frontend on push; that is harmless. At the time of that rollout the frontend ignored the new
+   `analysis_id` field and had no History or Saved Reports screen; UI V2 later added both.
 4. History starts with the **first successful question answered by the new backend**. Earlier
    answers were never stored and are not created retroactively.
 

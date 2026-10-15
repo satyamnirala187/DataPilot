@@ -222,6 +222,7 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Enforce TLS for PostgreSQL connections and verify production configuration
   - TLS (sslmode=require or stronger) enforced in code for the app and the setup scripts, and tested against Supabase; owner verified the TLS-enforcing commit is live on Render with READONLY_DATABASE_URL present. Not yet observed on a production query: the one attempted failed at Gemini before reaching the database.
 - [ ] Add frontend production security headers; finalise CSP after UI V2 assets are known
+  - `frontend/vercel.json` adds a CSP (no `unsafe-inline`, no `unsafe-eval`; Google Fonts and the Render API origin only), `X-Frame-Options`, `nosniff`, `Referrer-Policy` and `Permissions-Policy`. Verified against a local production build served with these headers: no CSP violations across the full UI and 7 viewport sizes, framing refused. Still to check on the deployed Vercel site before ticking.
 - [x] Add the project license and final legal/non-affiliation wording
 - [x] Review optional hardening: production API docs, backend HSTS, metadata-disclosure functions and production dependency split
   - All four done: API docs off by default (`ENABLE_API_DOCS`), HSTS `max-age=31536000`, metadata functions blocked, runtime-only `requirements.txt` with `requirements-dev.txt` for tests and seeding.
