@@ -50,3 +50,34 @@ could return and checks that the executor is never called.
 - Phase 8 is complete; its production `/docs` check used a normal revenue question. A live
   prompt-injection check through Gemini has not been run yet, because of Gemini rate limits. The
   tests above assume the worst case instead: a model that obeys the injection completely.
+- Logout revocations, like the rate limits, are kept in memory: a backend restart forgets them
+  (`docs/deployment.md`, "Rotating access").
+- One shared demo login means every visitor shares the same History and Saved Reports. Saved report
+  titles typed by one visitor are shown to others, always as plain text.
+- The frontend loads its fonts from Google Fonts; if that service is unavailable the interface
+  falls back to system fonts.
+- The production JavaScript bundle is about 658 kB (194 kB gzipped), above Vite's 500 kB warning.
+  This affects load time, not security.
+- The CSP's `connect-src` names the Render API origin, so a new backend URL needs both
+  `VITE_API_BASE_URL` and `frontend/vercel.json` updated (`docs/deployment.md`).
+
+Not vulnerabilities, but current product limits: saved reports cannot be renamed or deleted (the
+API has no such endpoints), and answers cannot be exported.
+
+## Production verification (Phase 17 closure)
+
+Checked on 2026-10-15, after UI V2 was merged to `main` and deployed:
+
+- **Frontend deployed:** the live site serves the UI V2 build from `main`.
+- **Security headers live** on `https://data-pilot-flax.vercel.app`, as set in
+  `frontend/vercel.json`: `Content-Security-Policy`, `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Permissions-Policy`
+  (camera, microphone, geolocation, payment and USB off).
+- **CSP enforced, not only present:** no violations on the live page at desktop and phone widths,
+  Google Fonts loading, and framing by another site refused (`frame-ancestors 'none'`).
+- **HSTS** is supplied by Vercel: `max-age=63072000; includeSubDomains; preload`. No separate
+  project HSTS header is needed.
+- **Owner smoke test in production:** login, one answered question, the History list with a stored
+  analysis reopened and Back, and the Saved Reports list with a saved report reopened and Back.
+
+Phase 17 (security, legal and release hardening) is closed.

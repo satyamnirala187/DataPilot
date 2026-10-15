@@ -221,13 +221,15 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Block resource-amplification SQL and add a bounded result-size safeguard
 - [x] Enforce TLS for PostgreSQL connections and verify production configuration
   - TLS (sslmode=require or stronger) enforced in code for the app and the setup scripts, and tested against Supabase; owner verified the TLS-enforcing commit is live on Render with READONLY_DATABASE_URL present. Not yet observed on a production query: the one attempted failed at Gemini before reaching the database.
-- [ ] Add frontend production security headers; finalise CSP after UI V2 assets are known
-  - `frontend/vercel.json` adds a CSP (no `unsafe-inline`, no `unsafe-eval`; Google Fonts and the Render API origin only), `X-Frame-Options`, `nosniff`, `Referrer-Policy` and `Permissions-Policy`. Verified against a local production build served with these headers: no CSP violations across the full UI and 7 viewport sizes, framing refused. Still to check on the deployed Vercel site before ticking.
+- [x] Add frontend production security headers; finalise CSP after UI V2 assets are known
+  - `frontend/vercel.json` adds a CSP (no `unsafe-inline`, no `unsafe-eval`; Google Fonts and the Render API origin only), `X-Frame-Options`, `nosniff`, `Referrer-Policy` and `Permissions-Policy`. Verified against a local production build served with these headers: no CSP violations across the full UI and 7 viewport sizes, framing refused. Verified live on Vercel after the UI V2 deploy (2026-10-15): every header present, CSP enforced with no violations, framing refused. HSTS (`max-age=63072000; includeSubDomains; preload`) is supplied by Vercel, so the project sets no HSTS header of its own.
 - [x] Add the project license and final legal/non-affiliation wording
 - [x] Review optional hardening: production API docs, backend HSTS, metadata-disclosure functions and production dependency split
   - All four done: API docs off by default (`ENABLE_API_DOCS`), HSTS `max-age=31536000`, metadata functions blocked, runtime-only `requirements.txt` with `requirements-dev.txt` for tests and seeding.
-- [ ] Run the final Phase 17 security regression and document residual risks
-- [ ] Commit Phase 17 security hardening
+- [x] Run the final Phase 17 security regression and document residual risks
+  - Full UI V2 regression on the production build under the production CSP (all screens, 7 viewport sizes, accessibility, reduced motion, frontend code and secret scans), live public checks on Vercel, and an owner-run production smoke test: login, one answered question, History and Saved Reports reopen and Back. Residual risks: `docs/security-review.md`.
+- [x] Commit Phase 17 security hardening
+  - Phase 17 closed on 2026-10-15; see `docs/security-review.md`, "Production verification (Phase 17 closure)".
 
 ## Phase 18 — Private demo access
 
