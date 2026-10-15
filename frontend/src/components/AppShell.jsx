@@ -13,12 +13,12 @@ const NAV_ITEMS = [
  * The signed-in frame: sidebar (logo, navigation, profile, Log out), top bar and the page's one
  * <main>. It holds no state: App owns the current view and passes the actions in.
  */
-export default function AppShell({ view, onNavigate, onAskAnother, onLogout, children }) {
+export default function AppShell({ view, onNavigate, onAskAnother, showAskAnother = true, onLogout, children }) {
   return (
     <div className="dp-shell">
       <Sidebar view={view} onNavigate={onNavigate} onLogout={onLogout} />
       <div className="dp-shell-body">
-        <TopBar onAskAnother={onAskAnother} />
+        <TopBar onAskAnother={onAskAnother} showAskAnother={showAskAnother} />
         <main className="dp-shell-main">{children}</main>
       </div>
     </div>
@@ -76,13 +76,19 @@ function Sidebar({ view, onNavigate, onLogout }) {
   )
 }
 
-function TopBar({ onAskAnother }) {
+function TopBar({ onAskAnother, showAskAnother }) {
   return (
     <header className="dp-topbar">
-      <button type="button" className="dp-topbar-ask" onClick={onAskAnother}>
-        <Icon name="chat" size={18} strokeWidth={1.8} />
-        <span>Ask another question…</span>
-      </button>
+      {/* Not shown on the empty Ask page, as in the approved design; the space stays so the
+          workspace label keeps its place. */}
+      {showAskAnother ? (
+        <button type="button" className="dp-topbar-ask" onClick={onAskAnother}>
+          <Icon name="chat" size={18} strokeWidth={1.8} />
+          <span>Ask another question…</span>
+        </button>
+      ) : (
+        <span className="dp-topbar-spacer" />
+      )}
       {/* Read-only label of the fictional demo workspace; not a switcher. */}
       <div className="dp-workspace">
         <p className="dp-workspace-name">{WORKSPACE.workspaceName}</p>

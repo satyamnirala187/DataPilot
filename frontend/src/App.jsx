@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import AnalysisProgress from './components/AnalysisProgress.jsx'
 import AppShell from './components/AppShell.jsx'
+import AskHome from './components/AskHome.jsx'
 import ErrorMessage from './components/ErrorMessage.jsx'
 import Icon from './components/Icon.jsx'
 import InsightCard from './components/InsightCard.jsx'
@@ -33,10 +35,11 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
   // Guards against a second submit before React has re-rendered the disabled button.
   const inFlight = useRef(false)
 
-  async function handleSubmit() {
+  // text: a quick question, asked without typing it; otherwise the question in the box.
+  async function handleSubmit(text) {
     if (inFlight.current) return
 
-    const trimmed = question.trim()
+    const trimmed = (typeof text === 'string' ? text : question).trim()
     if (!trimmed) {
       setValidationError('Please enter a business question.')
       return
@@ -73,6 +76,12 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
     if (validationError) setValidationError(null)
   }
 
+  // A quick question goes into the box and is asked through the same path as a typed one.
+  function handleQuickQuestion(text) {
+    setQuestion(text)
+    handleSubmit(text)
+  }
+
   function handleAskAnother() {
     setView('ask')
     setFocusRequest((count) => count + 1)
@@ -82,8 +91,17 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
     if (focusRequest) questionRef.current?.focus()
   }, [focusRequest])
 
+  // The empty Ask page has the question box in view, so the top bar's shortcut is not shown there.
+  const askHome = view === 'ask' && !loading && !result && !error
+
   return (
-    <AppShell view={view} onNavigate={setView} onAskAnother={handleAskAnother} onLogout={onLogout}>
+    <AppShell
+      view={view}
+      onNavigate={setView}
+      onAskAnother={handleAskAnother}
+      showAskAnother={!askHome}
+      onLogout={onLogout}
+    >
       {view === 'history' && <ViewPlaceholder title="History" text="History will appear here." />}
       {view === 'saved' && <ViewPlaceholder title="Saved Reports" text="Saved reports will appear here." />}
       {view === 'ask' && (
@@ -91,6 +109,7 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
           question={question}
           onQuestionChange={handleQuestionChange}
           onSubmit={handleSubmit}
+          onQuickQuestion={handleQuickQuestion}
           questionRef={questionRef}
           loading={loading}
           validationError={validationError}
@@ -103,37 +122,40 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
 }
 
 /**
- * The Ask page: still the pre-V2 question form and answer, unchanged, inside the V2 shell.
- * It is redesigned in a later batch.
+ * The Ask page, in one of three states:
+ *   no question yet    the V2 home: greeting, question box, quick questions
+ *   waiting            the V2 analysis progress for the question that was sent
+ *   answer or error    still the pre-V2 answer (redesigned in a later batch), with the question
+ *                      box above it for the next question
  */
-function AskPage({ question, onQuestionChange, onSubmit, questionRef, loading, validationError, result, error }) {
+function AskPage({ question, onQuestionChange, onSubmit, onQuickQuestion, questionRef, loading, validationError, result, error }) {
+  const formProps = { question, onQuestionChange, onSubmit, loading, validationError, inputRef: questionRef }
+  return (
+    <>
+      {/* Always present, so the one change to "Analyzing…" is announced; the steps are not. */}
+      <p role="status" className="visually-hidden">
+        {loading ? 'Analyzing your question…' : ''}
+      </p>
+      {loading ? (
+        <AnalysisProgress question={question.trim()} />
+      ) : result || error ? (
+        <AnswerPage formProps={formProps} result={result} error={error} />
+      ) : (
+        <AskHome onAsk={onQuickQuestion} {...formProps} />
+      )}
+    </>
+  )
+}
+
+/** The answer or error, still the pre-V2 components, unchanged. */
+function AnswerPage({ formProps, result, error }) {
   return (
     <div className="dp-legacy-page">
       <div className="container main">
-        <QuestionForm
-          question={question}
-          onQuestionChange={onQuestionChange}
-          onSubmit={onSubmit}
-          inputRef={questionRef}
-          loading={loading}
-          validationError={validationError}
-        />
+        <QuestionForm {...formProps} />
 
         <section className="results" aria-label="Answer">
-          <div role="status" aria-live="polite" className="status">
-            {loading && (
-              <>
-                <span className="status-dot" aria-hidden="true" />
-                Analyzing your business question...
-              </>
-            )}
-          </div>
-
-          {loading && <ResultSkeleton />}
-
           {error && <ErrorMessage title={error.title} message={error.message} tone={error.tone} />}
-
-          {!loading && !error && !result && <EmptyState />}
 
           {result && (
             <>
@@ -173,41 +195,6 @@ function ViewPlaceholder({ title, text }) {
     <div className="dp-placeholder">
       <h1>{title}</h1>
       <p>{text}</p>
-    </div>
-  )
-}
-
-/** Grey placeholder shapes while the answer loads. Decorative: the status line announces progress. */
-function ResultSkeleton() {
-  return (
-    <div className="skeleton" aria-hidden="true">
-      <div className="skeleton-block" style={{ height: 76 }} />
-      <div className="skeleton-block" style={{ height: 220 }} />
-      <div className="skeleton-block" style={{ height: 120 }} />
-    </div>
-  )
-}
-
-/** Shown before the first question. */
-function EmptyState() {
-  return (
-    <div className="empty-state">
-      <p className="empty-state-title">Your answer will appear here</p>
-      <p className="empty-state-text">Ask a question above, or start with one of the examples.</p>
-      <ul className="empty-steps">
-        <li>
-          <Icon name="sparkle" size={16} /> AI insight
-        </li>
-        <li>
-          <Icon name="chart" size={16} /> Chart or KPI
-        </li>
-        <li>
-          <Icon name="table" size={16} /> Result table
-        </li>
-        <li>
-          <Icon name="code" size={16} /> The SQL that ran
-        </li>
-      </ul>
     </div>
   )
 }

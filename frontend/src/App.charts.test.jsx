@@ -57,7 +57,7 @@ async function showResult(body) {
   const user = userEvent.setup()
   const view = render(<App />)
   await user.type(screen.getByLabelText('Your question'), 'A business question')
-  await user.click(screen.getByRole('button', { name: 'Analyze' }))
+  await user.click(screen.getByRole('button', { name: 'Ask' }))
   await screen.findByRole('heading', { name: 'Generated SQL' })
   return view
 }

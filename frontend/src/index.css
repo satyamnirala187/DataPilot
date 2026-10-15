@@ -166,6 +166,11 @@
   --dp-duration-pulse: 1.4s; /* skeleton */
   --dp-placeholder-cycle: 3.6s;
 
+  /* Ask page (values from the approved App reference) */
+  --dp-query-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.82));
+  --dp-query-border: rgba(197, 206, 226, 0.75);
+  --dp-border-control: #dce2ee; /* unfilled step rings, outline buttons */
+
   /* App shell (values from the approved App reference) */
   --dp-surface-hover: #f6f8fc; /* nav and quiet-button hover */
   --dp-avatar-bg: #e0e8fa;
@@ -1772,6 +1777,293 @@ tbody tr:last-child td {
   }
 }
 
+/* --- UI V2: Ask page (home, question box, quick questions, analysis progress) ---------------------
+   The answer itself is still the pre-V2 UI until the Result batch. */
+
+.dp-page {
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--dp-page-padding) var(--dp-page-padding) 120px;
+  font-family: var(--dp-font-sans);
+  line-height: normal;
+  color: var(--dp-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Max widths include the page padding on both sides. */
+.dp-ask-home {
+  max-width: calc(var(--dp-content-ask) + 2 * var(--dp-page-padding));
+  padding-top: var(--dp-page-padding-top-lg);
+  padding-bottom: 110px;
+  animation: dp-enter var(--dp-duration-enter) ease both;
+}
+
+@keyframes dp-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--dp-enter-offset));
+  }
+}
+
+.dp-page-result {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: calc(var(--dp-content-result) + 2 * var(--dp-page-padding));
+}
+
+.dp-greeting {
+  font-size: var(--dp-text-greeting);
+  font-weight: var(--dp-weight-regular);
+  line-height: 1.15;
+  letter-spacing: var(--dp-tracking-greeting);
+}
+
+.dp-greeting-sub {
+  margin-top: 8px;
+  font-size: var(--dp-text-body-lg);
+  font-weight: var(--dp-weight-light);
+  color: var(--dp-text-muted);
+}
+
+/* The question box. Also used above the (pre-V2) answer for the next question. */
+.dp-query {
+  font-family: var(--dp-font-sans);
+  line-height: normal;
+}
+
+.dp-ask-home .dp-query {
+  margin-top: 30px;
+}
+
+.dp-query-box {
+  padding: 22px 22px 18px 24px;
+  border: 1px solid var(--dp-query-border);
+  border-radius: var(--dp-radius-card);
+  background: var(--dp-query-bg);
+  -webkit-backdrop-filter: blur(var(--dp-query-blur)) saturate(1.2);
+  backdrop-filter: blur(var(--dp-query-blur)) saturate(1.2);
+  box-shadow: var(--dp-shadow-query);
+  transition: border-color var(--dp-duration-base), box-shadow var(--dp-duration-base),
+    transform var(--dp-duration-base);
+}
+
+.dp-query-box[data-invalid] {
+  border-color: var(--dp-error-field-border);
+}
+
+.dp-query-box:focus-within {
+  border-color: var(--dp-accent);
+  box-shadow: var(--dp-focus-ring), var(--dp-shadow-query);
+  transform: translateY(var(--dp-focus-lift));
+}
+
+/* Overrides the legacy global textarea rules (border, padding, resize, focus shadow). */
+.dp-query textarea {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--dp-ink);
+  font-family: var(--dp-font-sans);
+  font-size: var(--dp-text-xl);
+  line-height: 1.5;
+  resize: none;
+}
+
+.dp-query textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.dp-query textarea::placeholder {
+  color: var(--dp-placeholder);
+}
+
+.dp-query-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.dp-query-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--dp-error);
+  font-size: 14.5px;
+}
+
+.dp-section-label {
+  padding: 0 2px 10px;
+  font-size: var(--dp-text-label);
+  font-weight: var(--dp-weight-medium);
+  letter-spacing: var(--dp-tracking-label);
+  text-transform: uppercase;
+  color: var(--dp-text-subtle);
+}
+
+.dp-quick {
+  margin-top: 40px;
+}
+
+.dp-quick-list {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--dp-border-field);
+  list-style: none;
+}
+
+.dp-quick-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 15px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--dp-border-field);
+  background: transparent;
+  color: var(--dp-ink-2);
+  font-family: inherit;
+  font-size: var(--dp-text-body);
+  text-align: left;
+  transition: color var(--dp-duration-fast);
+}
+
+.dp-quick-item .icon {
+  color: var(--dp-text-subtle);
+}
+
+.dp-quick-item:hover {
+  color: var(--dp-accent);
+}
+
+.dp-quick-item:focus-visible {
+  outline: 2px solid var(--dp-accent);
+  outline-offset: 2px;
+}
+
+/* "Your question", above the analysis (and later the answer). */
+.dp-question-header {
+  max-width: 780px;
+}
+
+.dp-question-label {
+  font-size: var(--dp-text-table-head);
+  color: var(--dp-text-subtle);
+}
+
+.dp-question-title {
+  margin-top: 6px;
+  font-size: var(--dp-text-question);
+  font-weight: var(--dp-weight-regular);
+  line-height: 1.2;
+  letter-spacing: var(--dp-tracking-title);
+  overflow-wrap: anywhere;
+}
+
+.dp-card {
+  border: 1px solid var(--dp-border);
+  border-radius: var(--dp-radius-card);
+  background: var(--dp-surface);
+}
+
+.dp-analysis {
+  padding: 28px 30px;
+}
+
+.dp-analysis-title {
+  font-size: 20px;
+  font-weight: var(--dp-weight-medium);
+}
+
+.dp-analysis-note {
+  margin-top: 4px;
+  font-size: var(--dp-text-body-sm);
+  font-weight: var(--dp-weight-light);
+  color: var(--dp-text-muted);
+}
+
+.dp-analysis-bar {
+  height: 5px;
+  margin-top: 20px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--dp-border);
+}
+
+.dp-analysis-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--dp-accent);
+  transition: width var(--dp-duration-enter) ease;
+}
+
+.dp-analysis-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dp-analysis-steps li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15.5px;
+  color: var(--dp-text-subtle);
+}
+
+.dp-analysis-steps li[data-state='done'] {
+  color: var(--dp-ink);
+}
+
+.dp-analysis-steps li[data-state='active'] {
+  color: var(--dp-ink);
+  font-weight: var(--dp-weight-semibold);
+}
+
+.dp-step-icon {
+  flex: none;
+  color: var(--dp-accent);
+}
+
+.dp-step-ring {
+  stroke: var(--dp-border-control);
+}
+
+/* No approved narrow layout for these pages yet: keep them readable and inside the window. */
+@media (max-width: 720px) {
+  .dp-page {
+    padding: 28px 16px 80px;
+  }
+
+  .dp-greeting {
+    font-size: 30px;
+  }
+
+  .dp-question-title {
+    font-size: 24px;
+  }
+
+  .dp-query textarea {
+    font-size: 18px;
+  }
+
+  .dp-analysis {
+    padding: 22px 20px;
+  }
+}
+
 /* --- UI V2: signed-in app shell (sidebar, top bar, main) -----------------------------------------
    Only the frame is V2. The Ask page inside it is still the pre-V2 UI and keeps the legacy styles
    and fonts, so V2 type is set on the sidebar and top bar, not on the shell as a whole. */
@@ -1980,6 +2272,10 @@ tbody tr:last-child td {
 
 .dp-topbar-ask:hover {
   color: var(--dp-text-muted);
+}
+
+.dp-topbar-spacer {
+  flex: 1;
 }
 
 .dp-workspace {

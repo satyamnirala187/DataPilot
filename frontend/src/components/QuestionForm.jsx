@@ -1,14 +1,18 @@
-const EXAMPLE_QUESTIONS = [
-  'What is our total revenue?',
-  'What are the top 5 product categories by revenue?',
-  'What is our average order value?',
-  'Show monthly revenue for the last 6 months.',
-]
+import { useEffect, useState } from 'react'
+import { PLACEHOLDERS } from '../config/askContent.js'
+import Icon from './Icon.jsx'
 
 const MAX_QUESTION_LENGTH = 500
+const PLACEHOLDER_INTERVAL_MS = 3600
 
-/** The main workspace: the question box, the Analyze button and the example questions. */
+/**
+ * The question box: a textarea and the Ask button. Enter asks; Shift+Enter adds a new line.
+ * inputRef lets the top bar's "Ask another question…" move the cursor here.
+ */
 export default function QuestionForm({ question, onQuestionChange, onSubmit, loading, validationError, inputRef }) {
+  const [focused, setFocused] = useState(false)
+  const placeholder = useCyclingPlaceholder(!focused && !question && !loading)
+
   function handleSubmit(event) {
     event.preventDefault()
     onSubmit()
@@ -23,14 +27,8 @@ export default function QuestionForm({ question, onQuestionChange, onSubmit, loa
   }
 
   return (
-    <form className="card workspace" onSubmit={handleSubmit} aria-busy={loading} aria-labelledby="workspace-heading">
-      <h2 id="workspace-heading">Ask a business question</h2>
-      <p className="workspace-intro">
-        Ask in plain English. DataPilot writes a safe, read-only SQL query, runs it on the store data and explains
-        the answer.
-      </p>
-
-      <div className="question-field">
+    <form className="dp-query" onSubmit={handleSubmit} aria-busy={loading}>
+      <div className="dp-query-box" data-invalid={validationError ? true : undefined}>
         <label htmlFor="question" className="visually-hidden">
           Your question
         </label>
@@ -40,44 +38,50 @@ export default function QuestionForm({ question, onQuestionChange, onSubmit, loa
           name="question"
           rows={3}
           maxLength={MAX_QUESTION_LENGTH}
-          placeholder="e.g. Which 5 cities generated the most revenue this year?"
+          placeholder={placeholder}
           value={question}
           onChange={(event) => onQuestionChange(event.target.value)}
           onKeyDown={handleKeyDown}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           aria-invalid={validationError ? true : undefined}
           aria-describedby={validationError ? 'question-hint question-error' : 'question-hint'}
         />
-        {validationError && (
-          <p id="question-error" className="field-error" role="alert">
-            {validationError}
-          </p>
-        )}
-      </div>
-
-      <div className="form-actions">
-        <p id="question-hint" className="hint">
-          Press <kbd>Enter</kbd> to analyze, <kbd>Shift</kbd> + <kbd>Enter</kbd> for a new line.
+        <p id="question-hint" className="visually-hidden">
+          Press Enter to ask, or Shift and Enter for a new line.
         </p>
-        <button type="submit" className="primary-button" disabled={loading}>
-          {loading && <span className="spinner" aria-hidden="true" />}
-          {loading ? 'Analyzing…' : 'Analyze'}
-        </button>
+        <div className="dp-query-actions">
+          <button type="submit" className="dp-button-primary" disabled={loading}>
+            Ask
+          </button>
+        </div>
       </div>
-
-      <div className="examples">
-        <p className="eyebrow" id="examples-label">
-          Try an example
+      {validationError && (
+        <p id="question-error" className="dp-query-error" role="alert">
+          <Icon name="alertCircle" size={16} />
+          {validationError}
         </p>
-        <ul className="example-list" aria-labelledby="examples-label">
-          {EXAMPLE_QUESTIONS.map((example) => (
-            <li key={example}>
-              <button type="button" className="example-button" onClick={() => onQuestionChange(example)}>
-                {example}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
+      )}
     </form>
   )
+}
+
+/**
+ * The placeholder shown in an empty box: it moves to the next example every 3.6 seconds while
+ * active (empty, not focused, nothing loading). With reduced motion it stays on the first one.
+ */
+function useCyclingPlaceholder(active) {
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => {
+    if (!active || prefersReducedMotion()) return undefined
+    const timer = setInterval(() => setIndex((current) => (current + 1) % PLACEHOLDERS.length), PLACEHOLDER_INTERVAL_MS)
+    return () => clearInterval(timer)
+  }, [active])
+
+  return PLACEHOLDERS[index]
+}
+
+function prefersReducedMotion() {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }

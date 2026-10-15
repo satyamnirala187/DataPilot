@@ -19,6 +19,7 @@ const PATHS = {
   eye: 'M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0z',
   eyeOff: 'M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0zM4 4l16 16',
   logout: 'M9 4H5v16h4M16 8l4 4-4 4M20 12H9',
+  arrowRight: 'M5 12h14M13 6l6 6-6 6',
 }
 
 export default function Icon({ name, size = 18, strokeWidth = 2, className = '' }) {

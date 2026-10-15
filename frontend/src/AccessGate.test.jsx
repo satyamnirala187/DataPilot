@@ -63,7 +63,7 @@ async function signIn(user, username = 'demo-user-fake', password = 'fake-passwo
 
 async function ask(user, question = 'What is our total revenue?') {
   await user.type(screen.getByLabelText('Your question'), question)
-  await user.click(screen.getByRole('button', { name: 'Analyze' }))
+  await user.click(screen.getByRole('button', { name: 'Ask' }))
 }
 
 describe('login page', () => {
