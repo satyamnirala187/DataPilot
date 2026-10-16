@@ -1,9 +1,14 @@
 """Tests for reading deployment settings from environment variables (backend/app/config.py)."""
 
+import logging
+from pathlib import Path
+
 import pytest
 from pydantic_settings import SettingsError
 
 from app.config import Settings
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def settings_from_env(monkeypatch, **env):
@@ -37,3 +42,45 @@ def test_secrets_from_the_environment_stay_hidden(monkeypatch):
                                  GEMINI_API_KEY="fake-key-for-test")
     assert "hunter2" not in repr(settings) and "fake-key-for-test" not in repr(settings)
     assert settings.readonly_database_url.get_secret_value().endswith("@db.example/postgres")
+
+
+def test_groq_model_defaults_to_gpt_oss_120b(monkeypatch):
+    monkeypatch.delenv("GROQ_MODEL", raising=False)
+    assert Settings(_env_file=None).groq_model == "openai/gpt-oss-120b"
+
+
+def test_groq_model_comes_from_the_environment(monkeypatch):
+    assert settings_from_env(monkeypatch, GROQ_MODEL="groq-test-model").groq_model == "groq-test-model"
+
+
+def test_groq_key_is_loaded_when_present_and_stays_hidden(monkeypatch, caplog):
+    settings = settings_from_env(monkeypatch, GROQ_API_KEY="fake-groq-key-for-test")
+    assert settings.groq_api_key.get_secret_value() == "fake-groq-key-for-test"
+    logging.getLogger("app").warning("settings: %s %s", settings, settings.groq_api_key)
+    for text in (repr(settings), str(settings), settings.model_dump_json(), caplog.text):
+        assert "fake-groq-key-for-test" not in text
+
+
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_settings_work_without_a_groq_key(monkeypatch, value):
+    # Groq is optional for now: no key (or the empty line from .env.example) means "not configured".
+    if value is None:
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    else:
+        monkeypatch.setenv("GROQ_API_KEY", value)
+    monkeypatch.delenv("GROQ_MODEL", raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.groq_api_key is None
+    assert settings.groq_model == "openai/gpt-oss-120b"
+
+
+def test_tests_never_see_the_real_groq_key():
+    from app.config import settings  # the app's settings, loaded from .env at import
+    assert settings.groq_api_key is None  # blanked by the autouse fixture in conftest.py
+
+
+def test_groq_settings_are_never_offered_to_the_frontend():
+    example = (ROOT / ".env.example").read_text()
+    assert "GROQ_API_KEY=\n" in example  # documented, never with a value
+    frontend = [*(ROOT / "frontend" / "src").rglob("*.js*"), ROOT / "frontend" / ".env.example"]
+    assert not [path.name for path in frontend if "GROQ" in path.read_text()]

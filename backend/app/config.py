@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # .env lives at the project root: DataPilot/.env
@@ -73,6 +73,17 @@ class Settings(BaseSettings):
     # Gemini, used to turn questions into SQL. The key is a SecretStr so it never appears in logs.
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-3.6-flash"
+
+    # GroqCloud, the planned fallback for SQL generation. Optional and not used yet: without a key the
+    # app runs Gemini-only, exactly as before. Backend only; the key is a SecretStr like Gemini's.
+    groq_api_key: SecretStr | None = None
+    groq_model: str = "openai/gpt-oss-120b"
+
+    @field_validator("groq_api_key", mode="before")
+    @classmethod
+    def blank_groq_key_is_unset(cls, value: object) -> object:
+        # .env.example has an empty GROQ_API_KEY= line; copied as is, it means "not configured".
+        return None if isinstance(value, str) and not value.strip() else value
 
 
 settings = Settings()

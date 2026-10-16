@@ -20,6 +20,13 @@ def no_real_gemini_key(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_real_groq_key(monkeypatch):
+    """Tests never see the real GroqCloud key from .env: the app's settings have no key unless a
+    test sets a fake one."""
+    monkeypatch.setattr(settings, "groq_api_key", None)
+
+
+@pytest.fixture(autouse=True)
 def fresh_daily_limit(monkeypatch):
     """The global daily cap is process-wide state: give every test its own, generous counter so
     counts never leak between tests. Tests of the cap itself install their own."""
