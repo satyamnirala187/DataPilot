@@ -150,13 +150,13 @@ def test_default_client_sends_the_key_with_a_finite_timeout_and_is_closed(monkey
     assert generate_sql("Total revenue?") == "SELECT 1"
     request = fake.requests[0]
     assert request.headers["authorization"] == f"Bearer {FAKE_KEY}"
-    assert request.extensions["timeout"] == dict.fromkeys(("connect", "read", "write", "pool"), 15.0)
+    assert request.extensions["timeout"] == dict.fromkeys(("connect", "read", "write", "pool"), 10.0)
     assert built[0].is_closed
 
 
 def test_groq_timeout_is_bounded_and_shorter_than_geminis():
-    # 15 s per attempt, documented in groq_sql.py; the request budget is set in the routing step.
-    assert GROQ_SQL_TIMEOUT_MS == 15_000 < SQL_GENERATION_TIMEOUT_MS
+    # 10 s per attempt, documented in groq_sql.py; app.query_service plans the request budget with it.
+    assert GROQ_SQL_TIMEOUT_MS == 10_000 < SQL_GENERATION_TIMEOUT_MS
 
 
 # --- Provider failures --------------------------------------------------------------------
@@ -273,8 +273,8 @@ def test_groq_provider_never_executes_sql_or_calls_gemini(monkeypatch):
     assert "db_executor" not in source and "psycopg" not in source and "genai" not in source
 
 
-def test_groq_provider_is_not_wired_into_the_app_yet():
-    # Fallback routing is a later step: until then the live pipeline stays Gemini-only.
+def test_only_the_query_pipeline_uses_the_groq_provider():
+    # The fallback is routed in one place, app.query_service, ahead of the shared validator.
     users = [path.name for path in APP_DIR.glob("*.py") if path.name != "groq_sql.py"
              and "groq_sql" in path.read_text(encoding="utf-8")]
-    assert users == []
+    assert users == ["query_service.py"]

@@ -1,8 +1,9 @@
 """Turn a natural-language business question into one PostgreSQL SELECT, using GroqCloud.
 
-The planned fallback for app.nl_to_sql (Gemini); nothing calls it yet. It sends exactly the same
-instructions as Gemini (SYSTEM_INSTRUCTION and build_user_prompt from app.nl_to_sql), returns SQL
-text only and raises the same SQLGenerationError kinds, so a caller can treat both providers alike.
+The fallback for app.nl_to_sql (Gemini), used by app.query_service when GROQ_API_KEY is set. It
+sends exactly the same instructions as Gemini (SYSTEM_INSTRUCTION and build_user_prompt from
+app.nl_to_sql), returns SQL text only and raises the same SQLGenerationError kinds, so a caller can
+treat both providers alike.
 
 Like app.nl_to_sql, this module only generates SQL. It never connects to the database or runs
 anything, and it is not a security boundary: everything it returns must still pass
@@ -23,9 +24,10 @@ from app.nl_to_sql import (MAX_RETRY_AFTER_SECONDS, SYSTEM_INSTRUCTION, TIMEOUT_
 # Groq's OpenAI-compatible Chat Completions endpoint, called directly with httpx (no Groq SDK).
 GROQ_CHAT_COMPLETIONS_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Longest one Groq SQL call may take; httpx applies it to connecting and to each read. Shorter than
-# Gemini's 20 s because, as the fallback, it will run after Gemini has used part of the request
-# budget. httpx never retries a request by itself, so each call is exactly one attempt.
-GROQ_SQL_TIMEOUT_MS = 15_000
+# Gemini's 20 s because, as the fallback, it runs after Gemini has used part of the request budget
+# (app.query_service plans for it); a live call took under 1 s. httpx never retries a request by
+# itself, so each call is exactly one attempt.
+GROQ_SQL_TIMEOUT_MS = 10_000
 # openai/gpt-oss-120b is a reasoning model: its reasoning tokens count towards this limit, so it
 # leaves room for low-effort reasoning plus a long query. A response cut off by it is rejected.
 MAX_COMPLETION_TOKENS = 2048

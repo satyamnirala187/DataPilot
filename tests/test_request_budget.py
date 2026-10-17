@@ -21,6 +21,10 @@ from app.db_executor import CONNECT_TIMEOUT_SECONDS, QueryResult
 from app.insight_service import InsightError
 from app.nl_to_sql import SQL_GENERATION_TIMEOUT_MS, SQLGenerationError, generate_sql
 from app.query_service import (
+    FALLBACK_DB_STAGE_RESERVE_SECONDS,
+    FALLBACK_NEEDS_SECONDS,
+    FALLBACK_REQUEST_BUDGET_SECONDS,
+    GROQ_ATTEMPT_SECONDS,
     INSIGHT_SECONDS,
     DB_STAGE_RESERVE_SECONDS,
     REQUEST_BUDGET_SECONDS,
@@ -79,9 +83,10 @@ class Steps:
             raise self.insight
         return self.insight
 
-    def run(self):
+    def run(self, fallback=None):
         return run_business_query("What is our total revenue?", generate=self.generate, execute=self.execute,
-                                  summarize=self.summarize, sleep=self.clock.sleep, clock=self.clock)
+                                  summarize=self.summarize, sleep=self.clock.sleep, clock=self.clock,
+                                  fallback=fallback)
 
 
 @pytest.fixture
@@ -319,3 +324,76 @@ def test_generation_timeout_reaches_the_user_as_a_safe_503(monkeypatch):
     assert response.status_code == 503
     assert response.json() == {"error": {"code": "generation_timeout",
                                          "message": "The AI service took too long to respond. Please try again."}}
+
+
+# --- Gemini-only budget: unchanged by the Groq fallback ----------------------------------------------
+
+def test_gemini_only_budget_and_reserve_are_the_original_values():
+    # Without Groq (the default in tests: conftest.py blanks the key) nothing about the budget changed.
+    assert (REQUEST_BUDGET_SECONDS, DB_STAGE_RESERVE_SECONDS, SQL_ATTEMPT_SECONDS) == (45.0, 20.0, 20.0)
+    assert REQUEST_BUDGET_SECONDS - RETRY_NEEDS == 4.5  # the latest failure that still gets a retry
+
+
+def test_gemini_only_failure_after_5_seconds_gets_no_retry(clock):
+    # 5 s is inside the 50 s fallback budget's retry window, but Gemini-only keeps the 45 s budget.
+    steps = Steps(clock, [(5.0, "unavailable"), (1.0, None)])
+    with pytest.raises(QueryServiceError):
+        steps.run()
+    assert steps.generate_calls == 1 and clock.sleeps == []
+
+
+# --- With the Groq fallback ----------------------------------------------------------------------------
+
+class FakeGroq:
+    def __init__(self, clock, seconds=1.0):
+        self.clock, self.seconds, self.calls = clock, seconds, 0
+
+    def __call__(self, question):
+        self.calls += 1
+        self.clock.now += self.seconds
+        return SQL
+
+
+def test_fallback_budget_reserve_and_gate_are_the_approved_values():
+    assert (FALLBACK_REQUEST_BUDGET_SECONDS, FALLBACK_DB_STAGE_RESERVE_SECONDS, GROQ_ATTEMPT_SECONDS) == (50.0, 15.0, 10.0)
+    assert FALLBACK_NEEDS_SECONDS == GROQ_ATTEMPT_SECONDS + FALLBACK_DB_STAGE_RESERVE_SECONDS + SAFETY_MARGIN_SECONDS == 26.0
+    # A full 20 s Gemini timeout leaves 30 s: 4 s more than the fallback needs.
+    assert FALLBACK_REQUEST_BUDGET_SECONDS - SQL_ATTEMPT_SECONDS - FALLBACK_NEEDS_SECONDS == 4.0
+    assert FALLBACK_REQUEST_BUDGET_SECONDS < FRONTEND_TIMEOUT_SECONDS
+
+
+def test_with_a_fallback_the_request_budget_is_50_seconds(clock):
+    # SQL 20 s + database 13 s: 17 s of 50 s remain, enough for the 16 s insight. Gemini-only (45 s)
+    # would have 12 s left and skip it.
+    steps = Steps(clock, [(20.0, None)], execute_seconds=13.0)
+    assert steps.run(fallback=FakeGroq(clock)).insight == "Revenue is ₹21.30M."
+    gemini_only = Steps(FakeClock(), [(20.0, None)], execute_seconds=13.0)
+    assert gemini_only.run().insight is None and gemini_only.summarize_calls == 0
+
+
+def test_with_a_fallback_gemini_gets_one_attempt(clock):
+    groq = FakeGroq(clock)
+    steps = Steps(clock, [(0.3, "unavailable"), (1.0, None)])
+    assert steps.run(fallback=groq).sql.startswith(SQL)  # the validated SQL, with its LIMIT
+    assert steps.generate_calls == 1 and clock.sleeps == [] and groq.calls == 1
+
+
+def test_a_full_gemini_timeout_still_falls_back_and_ends_inside_the_budget(clock):
+    groq = FakeGroq(clock, seconds=GROQ_ATTEMPT_SECONDS)
+    steps = Steps(clock, [(SQL_ATTEMPT_SECONDS, "timeout")], execute_seconds=FALLBACK_DB_STAGE_RESERVE_SECONDS)
+    start = clock.now
+    response = steps.run(fallback=groq)
+    assert groq.calls == 1 and response.sql.startswith(SQL) and response.insight is None
+    assert clock.now - start <= FALLBACK_REQUEST_BUDGET_SECONDS
+
+
+def test_planned_fallback_paths_stay_within_the_50_second_budget():
+    budget, sql, groq, db = (FALLBACK_REQUEST_BUDGET_SECONDS, SQL_ATTEMPT_SECONDS, GROQ_ATTEMPT_SECONDS,
+                             FALLBACK_DB_STAGE_RESERVE_SECONDS)
+    paths = {
+        "Gemini timeout, then Groq and the database": sql + groq + db,
+        "latest Groq start, then Groq and the database": budget - FALLBACK_NEEDS_SECONDS + groq + db,
+        "normal Gemini answer, insight at the last moment": budget - (INSIGHT_SECONDS + SAFETY_MARGIN_SECONDS) + INSIGHT_SECONDS,
+    }
+    for name, seconds in paths.items():
+        assert seconds <= budget < FRONTEND_TIMEOUT_SECONDS, name
