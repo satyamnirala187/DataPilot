@@ -8,11 +8,12 @@ Browser ──> Vercel (static React app)
    │
    └──── HTTPS JSON ───> Render (FastAPI, 1 process) ──> Supabase PostgreSQL (read-only role)
                                 │
-                                └──> Gemini API
+                                ├──> Gemini API (primary: SQL and insight)
+                                └──> GroqCloud API (SQL fallback, only if GROQ_API_KEY is set)
 ```
 
-The browser only ever talks to the Render API. Secrets (Gemini key, database URLs) live only in
-Render's environment; the frontend holds just the public API URL. The API reaches Supabase as two
+The browser only ever talks to the Render API. Secrets (Gemini and Groq keys, database URLs) live
+only in Render's environment; the frontend holds just the public API URL. The API reaches Supabase as two
 roles: `datapilot_readonly` for questions and, for History and Saved Reports, `datapilot_app`.
 
 ## Prerequisites
@@ -23,6 +24,7 @@ roles: `datapilot_readonly` for questions and, for History and Saved Reports, `d
 - The read-only connection string from Supabase, using the **session pooler** (IPv4). Render cannot
   reach Supabase's IPv6-only direct host (`db.<ref>.supabase.co`).
 - A Gemini API key.
+- Optional, for the SQL fallback: a GroqCloud API key.
 - For History and Saved Reports: schema `datapilot` and the role `datapilot_app`, created once with
   `database/create_app_role.py`, which also wrote `APP_DATABASE_URL` to the local `.env`.
 
@@ -49,6 +51,7 @@ Environment variables (names only; enter values in the Render dashboard):
 | `READONLY_DATABASE_URL` | yes | read-only role via the session pooler (a secret). The backend requires TLS whatever the URL says, so `?sslmode=require` is optional |
 | `APP_DATABASE_URL` | for History | the `datapilot_app` role via the session pooler (a secret), from the local `.env`. Without it questions still work, but no History is stored and the History endpoints return 503; see [History and Saved Reports](#history-and-saved-reports) |
 | `GEMINI_API_KEY` | yes | Gemini API key |
+| `GROQ_API_KEY` | for the fallback | GroqCloud API key (a secret). Set: GroqCloud writes the SQL when Gemini cannot. Unset or empty: Gemini-only. See [GroqCloud SQL fallback](#groqcloud-sql-fallback) |
 | `CORS_ALLOWED_ORIGINS` | yes | JSON list, see [CORS](#cors) |
 | `DEMO_USERNAME` | yes | the shared demo login name (a secret); see [Private demo access](#private-demo-access) |
 | `DEMO_PASSWORD` | yes | the shared demo password, at least 16 characters (a secret) |
@@ -56,12 +59,29 @@ Environment variables (names only; enter values in the Render dashboard):
 | `DEMO_SESSION_MINUTES` | no | session length, default 120; leave unset |
 | `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS` | no | default 5 questions per 60 s per client |
 | `MAX_RESULT_BYTES` | no | default 1,000,000; larger answers are refused with 422 `result_too_large` |
-| `GLOBAL_DAILY_QUERY_LIMIT` | no | default 5 questions per Pacific day from all clients; set to `5` on Render. Size it to the Gemini quota: one question can use up to 4 Gemini requests |
+| `GLOBAL_DAILY_QUERY_LIMIT` | no | default 5 questions per Pacific day from all clients; set to `5` on Render. Size it to the Gemini quota: one question can use up to 4 Gemini requests Gemini-only, or 2 Gemini requests and 1 GroqCloud request with the fallback |
 | `GEMINI_MODEL` | no | default `gemini-3.6-flash`; set explicitly on Render |
+| `GROQ_MODEL` | no | default `openai/gpt-oss-120b` |
 | `ENABLE_API_DOCS` | no | leave unset in production: `/docs`, `/redoc` and `/openapi.json` then return 404 |
 
 Never set the admin `DATABASE_URL` on Render: it is only for the setup scripts in `database/`.
 `APP_DATABASE_URL` is a different, much narrower connection, not a replacement for it.
+
+### GroqCloud SQL fallback
+
+Gemini is the primary SQL provider; GroqCloud (`openai/gpt-oss-120b`) is tried once when Gemini
+cannot answer (`docs/architecture.md`, "SQL-generation fallback"). Its SQL goes through the same
+validator and read-only role.
+
+- **Enable:** add `GROQ_API_KEY` as a secret environment variable on the Render backend service.
+  `GROQ_MODEL` is optional.
+- **Disable:** delete `GROQ_API_KEY` on Render (or leave it empty). The service restarts
+  Gemini-only. There is no separate on/off flag, and no code change is needed either way.
+- **Backend only.** Never add it to Vercel, never as a `VITE_GROQ_*` variable, never in frontend
+  code, documentation or Git. The frontend does not need to know which provider answered.
+
+With the key set, a request may take up to 50 s instead of 45 s (still under the frontend's 60 s),
+and Gemini gets one SQL attempt instead of up to three.
 
 `PYTHON_VERSION` takes precedence over any other Python version setting on Render, so the build
 uses exactly Python 3.13.16; the build log shows the version it installed. The Blueprint sets it
@@ -324,8 +344,10 @@ the SQL validator, the read-only role, the statement timeout and the row limit.
 **Two application limits, plus Google's.** The per-client limit (5 per 60 s) stops bursts from one
 visitor; the global daily cap (`GLOBAL_DAILY_QUERY_LIMIT`) bounds total AI usage per day, which
 IP rotation cannot get round. Its day resets at midnight Pacific time, like Gemini's
-requests-per-day quota. It counts questions, and one question can use up to 4 Gemini requests
-(3 SQL attempts and 1 insight), so 5 questions stay within 20 requests a day. Both limits live in
+requests-per-day quota. It counts questions, not provider requests. Gemini-only, one question can
+use up to 4 Gemini requests (3 SQL attempts and 1 insight), so 5 questions stay within 20 requests a
+day. With the GroqCloud fallback, a question uses at most 2 Gemini requests (1 SQL attempt and
+1 insight) and at most 1 GroqCloud request; an answer from GroqCloud skips the insight. Both limits live in
 the process's memory: a restart resets them, and more instances would each count separately. They
 are safety brakes, not a quota system; Google's quota is the hard limit.
 
@@ -334,11 +356,20 @@ Production status, as checked by the project owner in Google AI Studio and the R
 - the production key is an Auth key, and the project is on the Free tier;
 - Render sets `GEMINI_MODEL=gemini-3.6-flash`, the backend's default too;
 - Gemini 3.6 Flash limits: 5 requests per minute, 250K tokens per minute, 20 requests per day;
-- Render sets `GLOBAL_DAILY_QUERY_LIMIT=5`: 5 questions × up to 4 Gemini requests = 20 a day.
+- Render sets `GLOBAL_DAILY_QUERY_LIMIT=5`: 5 questions × up to 4 Gemini requests = 20 a day in
+  the Gemini-only worst case (with the GroqCloud fallback, at most 2 Gemini requests per question).
 
 Model history: Gemini 3.8 Flash allowed only 2 requests per day on this tier, too few for
 DataPilot. Gemini 3.7 Flash was used next, until Google deprecated it (its requests are redirected
 to 3.8 Flash); the project owner then switched Render to 3.6 Flash.
+
+GroqCloud fallback: `GROQ_API_KEY` is set on the Render backend only (no Groq setting exists on
+Vercel), and the model is `openai/gpt-oss-120b`. Limits observed on 2026-10-17, in GroqCloud's
+`x-ratelimit-*` response headers during the live tests: 1,000 requests per day and 8,000 tokens per
+minute for this key. These are the values Groq reported then, not guaranteed or permanent limits;
+Groq can change them, so check its console or the current headers. One fallback question used about
+1,400–1,700 tokens, so at those observed limits the per-minute token limit allows roughly 4
+fallback questions a minute, well above DataPilot's own limits.
 
 Keep the key limited to the Gemini API where Google's console allows it. If the project is ever
 billed, keep its quotas low and add a budget with alerts; budget alerts only notify, they do not
@@ -384,13 +415,20 @@ the browser's developer tools (Network tab); search the logs for that ID to find
 - `cause=app_rate_limited` is DataPilot's own 5-per-minute limit and `cause=global_daily_limit` its
   daily cap; `cause=gemini_rate_limited` is Gemini's, with `limit_type` and `retry_after` when Gemini
   sent them.
-- `gemini_sql_attempts=2` or `3` means Gemini returned 5xx or network errors and was retried.
+- `gemini_sql_attempts=2` or `3` means Gemini returned 5xx or network errors and was retried
+  (Gemini-only; with the GroqCloud fallback Gemini gets one attempt).
+- `sql_provider=groq fallback=success` means Gemini could not answer (`fallback_reason`, for
+  example `unavailable` or `rate_limited`) and GroqCloud wrote the SQL. `fallback=failed` with
+  `cause=groq_<kind>` means both providers failed; `fallback=skipped_budget` means there was no time
+  left for GroqCloud. These fields appear only when `GROQ_API_KEY` is set.
 - `stage=auth` lines are questions refused for want of a valid session (`cause=missing_token`,
   `invalid_token`, `expired_token`, `revoked_token` or `not_configured`); nothing else ran.
 - `event=login` lines record each login attempt: `outcome=success`, `failure`, `rate_limited`,
   `unavailable` or `invalid_request`. The username and password are never logged.
-- `insight_status=skipped_budget` means SQL generation and the database used most of the 45 s
-  budget, so the optional insight was skipped.
+- `insight_status=skipped_budget` means SQL generation and the database used most of the request
+  budget (45 s, or 50 s with the GroqCloud fallback), so the optional insight was skipped.
+  `insight_status=skipped_fallback` means GroqCloud wrote the SQL, so Gemini was not asked for an
+  insight.
 - `history_status=saved` means the answer was stored as History; `disabled` means
   `APP_DATABASE_URL` is not set; `failed` (a WARNING line, with `history_error`) means storing failed
   while the user still got the answer.
@@ -411,8 +449,10 @@ line with the TCP peer, which on Render is the internal proxy address, not the v
 | First request after a while is very slow | Render's free plan sleeps when idle; the first request wakes it (the frontend waits up to 60 s) |
 | Render fails at startup with a settings error | `CORS_ALLOWED_ORIGINS` is not a JSON list |
 | Every question returns "The database is unavailable" | `READONLY_DATABASE_URL` is wrong, or uses the IPv6-only direct host instead of the pooler |
-| Questions return 429 with an AI-service limit message | Gemini's rate limit or quota was reached (`cause=gemini_rate_limited` in the logs); the rest of the app keeps working |
-| Questions return 503 "took too long" | Gemini did not answer within 20 s (`cause=gemini_timeout`) |
+| Questions return 429 with an AI-service limit message | Gemini's rate limit or quota was reached (`cause=gemini_rate_limited` in the logs) and the GroqCloud fallback is not configured or had no time left (`fallback=skipped_budget`); the rest of the app keeps working |
+| Questions return 503 "took too long" | Gemini did not answer within 20 s (`cause=gemini_timeout`), and GroqCloud was not configured or had no time left |
+| Questions return 503 "The AI service is unavailable" with `cause=groq_...` | Gemini failed and the GroqCloud fallback failed too (for example `groq_rate_limited` or `groq_timeout`); check both providers' status and quotas |
+| Answers arrive without an insight; logs show `sql_provider=groq` | Expected: GroqCloud wrote the SQL because Gemini could not, and the insight is skipped for that request |
 | Login says "Demo access is temporarily unavailable" | `DEMO_USERNAME`, `DEMO_PASSWORD` or `DEMO_SESSION_SECRET` is not set on Render (`outcome=unavailable` in the logs); every question is refused meanwhile |
 | Render fails at startup after setting a `DEMO_*` secret | `DEMO_PASSWORD` is under 16 characters or `DEMO_SESSION_SECRET` under 32 |
 | Everyone is sent back to the login page | `DEMO_SESSION_SECRET` was changed, or sessions reached their 2-hour expiry |

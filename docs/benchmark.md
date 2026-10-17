@@ -225,6 +225,15 @@ Live mode **consumes Gemini quota**: one SQL-generation request per question, pl
 automatic retries on transient errors. It runs questions one at a time, 15 seconds apart by
 default. The runner exits with code 1 if any case fails.
 
+Live mode uses the app's real pipeline, so if `GROQ_API_KEY` is set (in `.env` or the environment)
+the GroqCloud fallback is active too: when Gemini cannot answer, GroqCloud may write the SQL, and
+the run then no longer measures Gemini alone. To benchmark Gemini by itself, run Gemini-only with an
+empty key, which the app treats as unset:
+
+```bash
+GROQ_API_KEY= .venv/bin/python -m tests.benchmark.run --live
+```
+
 ## 11. Representative Cases
 
 | Question | Kind | Expected |

@@ -33,12 +33,12 @@ could return and checks that the executor is never called.
 
 | # | Requirement | Status | Where | Evidence |
 |---|---|---|---|---|
-| 10 | Secrets stay server-side | Met | `.env` is git-ignored; `SecretStr` settings; the frontend only has `VITE_API_BASE_URL` | full git-history scan (Phase 11): no keys, URLs or `.env` files committed; production (Phase 13): secrets are set only as Render environment variables, and a scan of the deployed frontend bundle found none |
+| 10 | Secrets stay server-side | Met | `.env` is git-ignored; `SecretStr` settings (including the optional `GROQ_API_KEY`); the frontend only has `VITE_API_BASE_URL` | full git-history scan (Phase 11): no keys, URLs or `.env` files committed; production (Phase 13): secrets are set only as Render environment variables, and a scan of the deployed frontend bundle found none |
 | 11 | Restricted CORS | Met | `CORS_ALLOWED_ORIGINS` setting (default: localhost Vite); no `*`, no credentials | `test_api.py` and `test_security.py` CORS tests, including unexpected 500s; production (Phase 13): the Vercel origin is configured and the live frontend calls the API successfully |
 | 12 | Input limits | Met | `QueryRequest`: 1–500 characters, unknown fields rejected; 16 KB request body cap | `test_invalid_request_bodies_are_rejected_before_the_pipeline`, oversized-body tests |
-| 13 | Safe error messages | Met | one `{"error": {code, message}}` shape for every error; `CatchUnexpectedErrors`; sanitized Gemini and database errors | `test_unexpected_500_is_safe_...`, Gemini/database sanitization tests, framework 404/405 tests |
+| 13 | Safe error messages | Met | one `{"error": {code, message}}` shape for every error; `CatchUnexpectedErrors`; sanitized Gemini, GroqCloud and database errors | `test_unexpected_500_is_safe_...`, Gemini/database sanitization tests, `tests/test_groq_sql.py` and `tests/test_sql_fallback.py` (no key or provider body in errors or logs), framework 404/405 tests |
 | 14 | Basic rate limiting | Met | `RateLimiter` on `POST /query`: 5 per 60 s per client IP (configurable); `/health` not limited | `tests/test_rate_limiter.py`, rate-limit tests in `test_security.py` |
-| 15 | Prompt-injection awareness | Met | the question is wrapped as untrusted data in both Gemini prompts; rules 1–9 apply whatever the model returns | prompt tests in `test_nl_to_sql.py` / `test_insight_service.py`; compromised-model pipeline tests |
+| 15 | Prompt-injection awareness | Met | the question is wrapped as untrusted data in both Gemini prompts and in the same SQL prompt sent to the GroqCloud fallback; rules 1–9 apply whatever either model returns | prompt tests in `test_nl_to_sql.py` / `test_insight_service.py` / `test_groq_sql.py`; compromised-model pipeline tests, including unsafe GroqCloud SQL in `test_sql_fallback.py` |
 
 ## Known limits (accepted for v1)
 
@@ -81,3 +81,50 @@ Checked on 2026-10-15, after UI V2 was merged to `main` and deployed:
   analysis reopened and Back, and the Saved Reports list with a saved report reopened and Back.
 
 Phase 17 (security, legal and release hardening) is closed.
+
+## Second AI provider: GroqCloud SQL fallback
+
+Added after Phase 17. GroqCloud (`openai/gpt-oss-120b`) is a second external AI provider, used only
+to write SQL when Gemini cannot (`docs/architecture.md`, "SQL-generation fallback"). It is enabled
+only when `GROQ_API_KEY` is set on the backend.
+
+**What GroqCloud receives** (the same SQL-generation request Gemini receives):
+
+- the user's natural-language question (1–500 characters), inside the untrusted-input delimiters;
+- DataPilot's schema context: the six business tables, their columns and relationships;
+- the business definitions and SQL rules needed to write the query.
+
+**What it never receives:** database credentials or connection strings, the Gemini API key, or any
+database result rows (the fallback path is SQL generation only; the insight, the one prompt that
+contains rows, goes to Gemini and is skipped when GroqCloud wrote the SQL). `GROQ_API_KEY` is sent
+to GroqCloud only as the `Authorization` header that authenticates the request, never as part of
+the prompt.
+
+**Controls:**
+
+- GroqCloud only returns SQL text. Its SQL goes through the same SQLGlot validator, the same
+  read-only role, read-only transaction, statement timeout and row and size limits as Gemini's;
+  there is no separate execution path.
+- Fallback happens only before validation, for failures that mean Gemini produced no usable SQL. A
+  validator rejection or a database error never leads to another model, so a question cannot shop
+  between providers for SQL that gets past the checks.
+- One GroqCloud attempt per question, with a 10-second timeout, inside the request budget; the
+  per-client limit and the global daily cap apply unchanged.
+- `GROQ_API_KEY` is a `SecretStr` setting, set only in Render's environment and the local `.env`;
+  it is never a `VITE_` variable and never in the frontend. Tests blank the real key and use fakes.
+- Provider errors are reduced to a status and a fixed error code; GroqCloud's error messages,
+  request details and the key are never logged or returned. Both providers failing gives the
+  usual neutral 503.
+
+This review does not assess GroqCloud's own data-retention or privacy terms.
+
+**Production smoke test, 2026-10-17.** With `GROQ_API_KEY` set on Render, one controlled question
+was answered in production through the fallback. This is a single check, not a benchmark. The
+request's summary log line showed:
+
+- outcome success, HTTP 200, after one Gemini SQL attempt that failed as `unavailable`;
+- `fallback=success` and `sql_provider=groq`: GroqCloud wrote the SQL;
+- the SQL passed validation and ran on the read-only role, returning one row shown as a KPI;
+- `insight_status=skipped_fallback`: the Gemini insight was skipped, as designed;
+- `history_status=saved`: the answer was stored once in History;
+- total request time 7.825 s.

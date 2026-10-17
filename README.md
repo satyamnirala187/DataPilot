@@ -10,15 +10,16 @@ AI insight. It is built around a fictional e-commerce store with synthetic data.
 **Live app:** [data-pilot-flax.vercel.app](https://data-pilot-flax.vercel.app). The hosted demo is
 access-controlled to protect limited third-party API quota; demo credentials are shared privately.
 
-> DataPilot uses the Gemini API to write SQL. When Gemini's rate limits or availability are hit,
-> questions can be temporarily unavailable; the app shows a clear message asking you to try again.
-> This is a limit of the external provider, not of the application.
+> DataPilot uses the Gemini API to write SQL, with GroqCloud as a fallback when Gemini is
+> rate-limited or unavailable. If both providers are unavailable, questions can be temporarily
+> unavailable; the app shows a clear message asking you to try again. This is a limit of the
+> external providers, not of the application.
 
 ## What DataPilot Does
 
 ```
 Natural-language question
-  → Gemini generates a PostgreSQL query
+  → Gemini generates a PostgreSQL query (GroqCloud, once, if Gemini cannot answer)
   → SQLGlot validates it (read-only, allowed tables and functions, row limit)
   → PostgreSQL runs it with a read-only role
   → DataPilot picks a KPI, bar chart, line chart or table
@@ -62,7 +63,8 @@ does not depend on external Gemini quota.
 ## Key Features
 
 - **Plain-English questions** about revenue, profit, customers, products, orders and payments.
-- **NL-to-SQL with Gemini**, using the database schema and fixed business definitions as context.
+- **NL-to-SQL with Gemini**, using the database schema and fixed business definitions as context,
+  with **one GroqCloud fallback** when Gemini is rate-limited or unavailable.
 - **SQLGlot validation** of every generated query before it can run.
 - **Dedicated read-only PostgreSQL role** for all application queries.
 - **Deterministic visualization**: KPI, bar, line or table, chosen by fixed rules.
@@ -85,7 +87,7 @@ does not depend on external Gemini quota.
 User
   → React + Vite frontend (Vercel)
   → FastAPI backend (Render)
-       → Gemini API: writes SQL
+       → Gemini API: writes SQL (GroqCloud API if Gemini cannot answer)
        → SQLGlot validator
        → Supabase PostgreSQL, read-only role
        → chart selection and optional insight
@@ -93,8 +95,15 @@ User
 ```
 
 The backend runs one fixed pipeline: generate, validate, execute, choose a visualization, and
-optionally summarise. The browser only ever talks to the backend; the AI key and database
+optionally summarise. The browser only ever talks to the backend; the AI keys and database
 credentials never leave it.
+
+**AI providers.** Gemini (`gemini-3.6-flash`) is the primary provider for SQL and the optional
+insight. When `GROQ_API_KEY` is set and Gemini cannot answer (rate limit, outage, timeout, an empty
+or malformed response), GroqCloud (`openai/gpt-oss-120b`) gets one attempt with the same prompt. Its
+SQL goes through the same validator and read-only database role; an answer from GroqCloud is shown
+without the insight. This is one primary provider with one controlled fallback, not a multi-model
+system, and a query rejected by the validator is never sent to another model.
 
 [Read the full architecture documentation](docs/architecture.md)
 
@@ -118,7 +127,8 @@ enforced by independent layers in code and in the database:
 8. **Safe error handling**: users see clear messages; stack traces, credentials and provider
    errors are never returned.
 
-Gemini only returns text. It has no database connection and cannot run, approve or change anything.
+Gemini and its GroqCloud fallback only return text. Neither has a database connection or can run,
+approve or change anything.
 This reduces risk through defence in depth; it does not make the system impossible to misuse.
 
 [Read the full safety model](docs/safety-model.md) · [Security review](docs/security-review.md)
@@ -172,7 +182,7 @@ the same display. The full result table is always shown as well.
 | Frontend | React, Vite, Recharts |
 | Backend | Python, FastAPI, Pydantic |
 | Database | PostgreSQL on Supabase, psycopg |
-| AI | Gemini API |
+| AI | Gemini API (primary); GroqCloud API, `openai/gpt-oss-120b` (SQL fallback) |
 | SQL validation | SQLGlot |
 | Synthetic data | Faker |
 | Testing | pytest; Vitest and React Testing Library |
@@ -206,7 +216,7 @@ DataPilot/
 - Python 3.13 or newer (production uses 3.13)
 - Node.js 20.19+ or 22.12+ (required by Vite)
 - A PostgreSQL database; the project uses Supabase
-- A Gemini API key
+- A Gemini API key (a GroqCloud API key is optional, for the SQL fallback)
 
 ### 1. Clone
 
@@ -268,12 +278,14 @@ Backend (in the project-root `.env` locally, or in the Render dashboard):
 |---|---|
 | `READONLY_DATABASE_URL` | connection for the read-only role; used by the running app for every query, always over TLS |
 | `GEMINI_API_KEY` | Gemini API key |
+| `GROQ_API_KEY` | optional; GroqCloud API key for the SQL fallback. Unset or empty: Gemini-only. Backend only, never a `VITE_` variable |
+| `GROQ_MODEL` | optional; GroqCloud model (default `openai/gpt-oss-120b`) |
 | `CORS_ALLOWED_ORIGINS` | optional; JSON list of browser origins allowed to call the API (defaults to the local Vite origins) |
 | `TRUST_CF_CONNECTING_IP` | optional; `true` only behind Cloudflare, as on Render, so rate limiting uses the real client IP |
 | `DEMO_USERNAME`, `DEMO_PASSWORD`, `DEMO_SESSION_SECRET` | the shared demo login and the key that signs its sessions (password 16+, secret 32+ characters); without them every question is refused |
 | `DEMO_SESSION_MINUTES` | optional; session length in minutes (default 120) |
 | `ENABLE_API_DOCS` | optional; `true` to serve `/docs`, `/redoc` and `/openapi.json` (default off) |
-| `GLOBAL_DAILY_QUERY_LIMIT` | optional; questions per day from all clients together (default 5). The day resets at midnight Pacific time, like Gemini's daily quota; one question can use up to 4 Gemini requests |
+| `GLOBAL_DAILY_QUERY_LIMIT` | optional; questions per day from all clients together (default 5). The day resets at midnight Pacific time, like Gemini's daily quota; one question can use up to 4 Gemini requests (Gemini-only), or 2 Gemini requests and 1 GroqCloud request with the fallback |
 | `DATABASE_URL` | admin connection for the setup scripts in `database/` only; not used by the running app |
 
 Frontend (`frontend/.env.local`):
@@ -324,9 +336,9 @@ measure of Gemini's accuracy**.
 | Backend | Render |
 | Database | Supabase PostgreSQL |
 
-The backend only accepts browser requests from configured frontend origins (CORS). The Gemini key,
-database credentials and demo login secrets stay on the backend, and the running app connects with
-the read-only role.
+The backend only accepts browser requests from configured frontend origins (CORS). The Gemini and
+GroqCloud keys, database credentials and demo login secrets stay on the backend, and the running app
+connects with the read-only role.
 
 [Deployment guide](docs/deployment.md)
 
@@ -349,7 +361,9 @@ debugging.
   backend restarts (sessions still expire after 2 hours).
 - The dataset is a synthetic e-commerce store, not real business data.
 - Rate limiting and the daily cap are in memory, so they are per server process and reset on restart.
-- Gemini availability and quota can make AI requests temporarily unavailable.
+- Gemini availability and quota can make AI requests temporarily unavailable. The GroqCloud
+  fallback covers many of these failures, but both providers can be unavailable at once, and
+  answers written by GroqCloud have no insight.
 - Correct SQL for arbitrary, unseen questions is not guaranteed; the generated SQL is shown so it
   can be checked.
 - The live Gemini benchmark has not been completed yet.
@@ -381,6 +395,6 @@ It is an independent portfolio and academic demonstration project. The e-commerc
 its data are fictional, generated with Faker for demonstration and testing; no real customer or
 business data is included.
 
-DataPilot is not affiliated with, endorsed by or sponsored by Google (including Gemini), Supabase,
-Render, Vercel, OpenAI, Anthropic or any other third-party provider it mentions. Product names are
+DataPilot is not affiliated with, endorsed by or sponsored by Google (including Gemini), Groq,
+Supabase, Render, Vercel, OpenAI, Anthropic or any other third-party provider it mentions. Product names are
 trademarks of their respective owners and are used only to describe the technology DataPilot uses.

@@ -205,6 +205,9 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Add minimal structured request observability
 - [x] Add reliability tests for timeout, retry, request-budget and observability behaviour
 - [x] Run a controlled live Gemini reliability check
+- [x] Add a GroqCloud SQL-generation fallback for Gemini provider failures
+  - GroqCloud (`openai/gpt-oss-120b`) gets one attempt when Gemini cannot answer (rate limit, outage, timeout, model or key problem, empty or malformed response); never after a validator rejection or a database error. Its SQL goes through the same SQLGlot validator and read-only executor. Enabled only by `GROQ_API_KEY` on the backend (Render); without it DataPilot is Gemini-only with its original 45 s budget and retries, with it the budget is 50 s and Gemini gets one attempt. A GroqCloud answer skips the Gemini insight.
+  - Verified in production on 2026-10-17 with one controlled question: Gemini `unavailable`, then `sql_provider=groq fallback=success`, KPI answer returned, `insight_status=skipped_fallback`, `history_status=saved`, 7.825 s. A single smoke test, not a benchmark.
 - [ ] Run the full live benchmark and record results
 - [ ] Commit Phase 16 reliability hardening
 

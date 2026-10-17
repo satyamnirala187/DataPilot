@@ -41,9 +41,11 @@ class Settings(BaseSettings):
 
     # Global safety brake on AI usage: at most this many questions per Pacific day (Gemini's quota
     # day) from all clients together (app/rate_limiter.py DailyLimit). It counts questions, not
-    # Gemini requests: one question can use up to 4 (3 SQL attempts + 1 insight), so 5 questions
-    # stay within a 20-requests-per-day free tier. Not Gemini's quota, which remains the hard
-    # limit. In memory, so a restart resets it.
+    # provider requests. Gemini-only, one question can use up to 4 Gemini requests (3 SQL attempts
+    # + 1 insight), so 5 questions stay within a 20-requests-per-day free tier. With the Groq
+    # fallback (GROQ_API_KEY set) it uses at most 2 Gemini requests (1 SQL attempt + 1 insight) and
+    # at most 1 Groq request; an answer from Groq skips the insight. Not the providers' quotas,
+    # which remain the hard limits. In memory, so a restart resets it.
     global_daily_query_limit: int = Field(default=5, ge=1)
 
     # Read-only role used for every user query. The admin DATABASE_URL is deliberately not
@@ -74,8 +76,9 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-3.6-flash"
 
-    # GroqCloud, the planned fallback for SQL generation. Optional and not used yet: without a key the
-    # app runs Gemini-only, exactly as before. Backend only; the key is a SecretStr like Gemini's.
+    # GroqCloud, the fallback for SQL generation (app/query_service.py): with a key, Groq gets one
+    # attempt when Gemini cannot answer; without one the app runs Gemini-only. There is no separate
+    # on/off setting. Backend only, never a VITE_ variable; the key is a SecretStr like Gemini's.
     groq_api_key: SecretStr | None = None
     groq_model: str = "openai/gpt-oss-120b"
 

@@ -1,7 +1,7 @@
 # DataPilot Safety Model
 
-**LLM-generated SQL is untrusted input.** DataPilot does not run Gemini's SQL because the model
-wrote it, or because the prompt asked for safe SQL. Every query must pass deterministic checks in
+**LLM-generated SQL is untrusted input.** DataPilot does not run SQL from Gemini, or from its
+GroqCloud fallback, because a model wrote it or because the prompt asked for safe SQL. Every query must pass deterministic checks in
 code, and then runs under database permissions that cannot write, whatever the SQL says.
 
 This document explains the design. The requirement-by-requirement evidence (which code enforces
@@ -13,6 +13,8 @@ each rule and which tests prove it) is in [`security-review.md`](security-review
 User question
   → request checks          size, shape, length, rate limit          (FastAPI)
   → Gemini writes SQL       prompt rules, structured output          (not trusted)
+    (or GroqCloud, once,    same prompt, same output format          (not trusted)
+     if Gemini cannot answer)
   → SQLGlot validation      one read-only SELECT, allowed tables,     (deterministic code)
                             allowed functions, row limit
   → read-only role          SELECT on six tables only                (PostgreSQL permissions)
@@ -44,7 +46,7 @@ Before any model call, `backend/app/main.py`, `middleware.py`, `client_ip.py` an
 | Question length | **1–500 characters**; a whitespace-only question is rejected before Gemini is called |
 | Demo access | `POST /query` requires a session from the one shared demo login. `POST /auth/login` checks the username and password on the backend (constant-time, and the same 401 whichever is wrong) and returns a token signed with HMAC-SHA256 that expires after 2 hours; the frontend keeps it in `sessionStorage` and sends it as `Authorization: Bearer`. Without a valid token `/query` returns 401 before the rate limit, the daily cap, Gemini or the database. Logins are limited to 5 per 15 minutes per client. No cookies, user database or Supabase Auth. Logout revocations are kept in memory (a restart forgets them); changing `DEMO_SESSION_SECRET` ends every session. If the secrets are missing, login is unavailable and every question is refused |
 | Rate limit | **5 questions per 60 seconds per client** on `POST /query` (configurable); 429 `too_many_requests` with `Retry-After`. The History and Saved Reports endpoints have their own limit, 60 requests per minute per client, after the session check; they never touch the `/query` limit or the daily cap. `/health` is not limited |
-| Daily cap | At most `GLOBAL_DAILY_QUERY_LIMIT` questions (default **5**) per day from **all clients together**, so IP rotation cannot get round it. The day runs midnight to midnight Pacific time (DST-aware), matching Gemini's requests-per-day quota. It counts questions: one question can use up to 4 Gemini requests (3 SQL attempts and 1 insight), so 5 questions fit a 20-requests-per-day free tier. Checked after the per-client limit and request validation, before the pipeline: each admitted question uses one unit, whatever happens next; malformed or per-client-refused requests and `/health` use none. Over the cap: 429 `daily_limit_reached`, with `Retry-After` set to the seconds until the next Pacific midnight. The configured number is never shown or logged |
+| Daily cap | At most `GLOBAL_DAILY_QUERY_LIMIT` questions (default **5**) per day from **all clients together**, so IP rotation cannot get round it. The day runs midnight to midnight Pacific time (DST-aware), matching Gemini's requests-per-day quota. It counts questions, not provider requests. Gemini-only, one question can use up to 4 Gemini requests (3 SQL attempts and 1 insight), so 5 questions fit a 20-requests-per-day free tier; with the GroqCloud fallback, at most 2 Gemini requests (1 SQL attempt and 1 insight) and at most 1 GroqCloud request, and a GroqCloud answer skips the insight. Checked after the per-client limit and request validation, before the pipeline: each admitted question uses one unit, whatever happens next; malformed or per-client-refused requests and `/health` use none. Over the cap: 429 `daily_limit_reached`, with `Retry-After` set to the seconds until the next Pacific midnight. The configured number is never shown or logged |
 | Client identity | `CF-Connecting-IP` (set by Cloudflare in front of Render) when `TRUST_CF_CONNECTING_IP=true`, otherwise the connecting address. `X-Forwarded-For` is never used, because clients control it. IPv6 clients are grouped per /64 |
 | CORS | Only origins listed in `CORS_ALLOWED_ORIGINS` (the production Vercel URL and localhost), only `GET`/`POST`, only the `Content-Type` header, no credentials, never `*` |
 | Security headers | Every response: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, and `Strict-Transport-Security: max-age=31536000` (browsers then use only HTTPS for the API; no `includeSubDomains` or `preload`) |
@@ -69,6 +71,20 @@ malformed response. **None of these prompt rules is a security boundary.** They 
 likely; the validator and the database decide what actually runs. The "cannot be answered" fallback
 is itself only a request to the model; when it is followed, it is an ordinary `SELECT` that goes
 through the same validation.
+
+**The GroqCloud fallback gets exactly the same instructions.** `groq_sql.generate_sql` sends the
+same system prompt and the same delimited question (one shared copy in `nl_to_sql.py`), asks for
+the same `{"sql": "..."}` JSON, and returns only SQL text. Its SQL is not trusted any more than
+Gemini's: it goes through the same validator, the same read-only role and the same limits, and
+there is no separate execution path.
+
+**Provider fallback ends where validation begins.** GroqCloud is tried only when Gemini could not
+produce SQL at all (rate limit, outage, timeout, a model or key problem, or an empty or malformed
+response; the full list is in [`architecture.md`](architecture.md#sql-generation-fallback)). Once
+generated SQL reaches the validator, the choice of provider is over. DataPilot never tries another
+model because one model's SQL was rejected, and never after a database error, so a question cannot
+shop between models for SQL that gets past the checks. GroqCloud gets one attempt and never hands
+back to Gemini.
 
 The insight prompt (`insight_service.py`) also marks the question and rows as data, and the
 returned insight is checked (non-empty, at most 600 characters, no code fences). The frontend shows
@@ -210,9 +226,10 @@ produce a misleading but read-only answer.
 
 | Situation | Result |
 |---|---|
-| Gemini unavailable (5xx or network) | retried twice (after 0.5 s and 1 s), then 503 `generation_unavailable` |
-| Gemini rate-limited | 429 `rate_limited`, never retried. If Gemini sends structured quota metadata, the message says whether it is a temporary limit or an exhausted quota; otherwise a generic message. A usable Gemini retry delay becomes a `Retry-After` header, whatever the type of limit |
-| Malformed or empty model output | 502 `generation_failed` |
+| Gemini unavailable (5xx or network) | with GroqCloud configured: GroqCloud is tried once. Gemini-only: retried twice (after 0.5 s and 1 s), then 503 `generation_unavailable` |
+| Gemini rate-limited | with GroqCloud configured: GroqCloud is tried once. Gemini-only (or no time left for GroqCloud): 429 `rate_limited`, never retried. If Gemini sends structured quota metadata, the message says whether it is a temporary limit or an exhausted quota; otherwise a generic message. A usable Gemini retry delay becomes a `Retry-After` header, whatever the type of limit |
+| Malformed or empty model output | with GroqCloud configured: GroqCloud is tried once. Otherwise 502 `generation_failed` |
+| Gemini and GroqCloud both fail | 503 `generation_unavailable`, with the same neutral message; no provider is named |
 | SQL rejected by the validator | 400 `unsafe_sql`; nothing is executed |
 | Database timeout | 504 `query_timeout` |
 | Database refuses the query | 400 `query_not_allowed` |
@@ -222,14 +239,17 @@ produce a misleading but read-only answer.
 | Insight generation fails (any reason) | **not fatal**: the already successful result is returned with HTTP 200 and `insight: null` |
 | Storing History fails (any reason) | **not fatal**: the full result is returned with HTTP 200 and `analysis_id: null`; nothing is retried or rerun, and the log line has only a fixed error kind |
 
-Errors from the Gemini SDK are reduced to their HTTP status before anything is logged or returned,
-so provider messages, request details and the API key never reach the user.
+Errors from the Gemini SDK and from GroqCloud are reduced to their HTTP status (and, for
+GroqCloud, its fixed error code) before anything is logged or returned, so provider messages,
+request details and the API keys never reach the user. The frontend never learns which provider
+answered.
 
 ## 9. Secrets and deployment boundaries
 
-- The demo login secrets (`DEMO_USERNAME`, `DEMO_PASSWORD`, `DEMO_SESSION_SECRET`), the Gemini API key
-  and both database connection strings exist only on the backend (local `.env`,
-  Render environment variables). In code they are `SecretStr`, so they are hidden in logs and
+- The demo login secrets (`DEMO_USERNAME`, `DEMO_PASSWORD`, `DEMO_SESSION_SECRET`), the Gemini API key,
+  the optional GroqCloud API key (`GROQ_API_KEY`) and both database connection strings exist only
+  on the backend (local `.env`, Render environment variables). There is no `VITE_GROQ_*` or other
+  frontend AI setting. In code they are `SecretStr`, so they are hidden in logs and
   error messages.
 - The frontend has no secrets. Vite only exposes variables prefixed `VITE_`, and the only one used
   is `VITE_API_BASE_URL`, the public backend URL.
@@ -239,7 +259,7 @@ so provider messages, request details and the API key never reach the user.
 
 ## 10. What the model cannot do
 
-Gemini only ever returns text to the backend. It cannot:
+Gemini and its GroqCloud fallback only ever return text to the backend. Neither can:
 
 - connect to PostgreSQL: it has no credentials and no network path to the database;
 - execute its own SQL: only the backend runs SQL, and only after validation;
@@ -256,8 +276,8 @@ Gemini only ever returns text to the backend. It cannot:
   React's escaping, no raw-HTML rendering and the 2-hour expiry).
 - The rate limiter and the daily cap are in memory: they are per server process and reset on
   restart, and several instances would each keep their own counts. Production runs a single
-  process. They are best-effort safety brakes, not durable or distributed quotas; Gemini's own
-  project quota is the hard limit on AI usage.
+  process. They are best-effort safety brakes, not durable or distributed quotas; the providers'
+  own quotas (Gemini's project quota and GroqCloud's account limits) are the hard limits on AI usage.
 - Model output is probabilistic. The validator and the role stop unsafe SQL, but they cannot make a
   wrong-but-safe query correct; the SQL is shown so users can check it.
 - The validator checks structure, tables and functions, not columns or business meaning.
