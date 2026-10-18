@@ -212,7 +212,8 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
   - Verified in production on 2026-10-17 with one controlled question: Gemini `unavailable`, then `sql_provider=groq fallback=success`, KPI answer returned, `insight_status=skipped_fallback`, `history_status=saved`, 7.825 s. A single smoke test, not a benchmark.
 - [x] Run the full live benchmark and record results
   - Gemini-only (GroqCloud disabled): 24/25 pass, 1 correctness failure, 0 unavailable. 15 cases were judged on the current code and 10 on 2026-10-15, before the GroqCloud-fallback commits. Not a single pass: unavailable cases were re-run later. See `docs/benchmark.md` §9.
-- [ ] Commit Phase 16 reliability hardening
+- [x] Commit Phase 16 reliability hardening
+  - Committed in stages: timeouts and retries (`a41cb48`), request observability and 429 handling (`780030d`), live reliability check (`91c4fe1`), GroqCloud fallback (`21ce358`–`50a9258`), live benchmark baseline (`6a65d02`), and the delivered-order join fix for its one failure (`9db2ef0`).
 
 ## Phase 17 — Security, legal and release hardening
 
