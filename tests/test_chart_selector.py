@@ -103,10 +103,85 @@ def test_date_and_datetime_objects_are_dates():
     assert kind(["ts", "orders"], [[datetime(2026, 9, 1, 10), 3], [datetime(2026, 9, 2, 10), 4]]) == "line"
 
 
-@pytest.mark.parametrize("value", ["2026-13-45", "2026-09", "Sept 2026", "2026/09/01"])
+def test_year_month_strings_are_a_line_chart():
+    # Live benchmark: Gemini grouped months with TO_CHAR(order_date, 'YYYY-MM').
+    rows = [["2026-04", 784130.39], ["2026-05", 801234.10], ["2026-06", 799999.99]]
+    assert select_visualization(["month", "revenue"], rows) == \
+        Visualization(type="line", x_key="month", y_key="revenue")
+
+
+@pytest.mark.parametrize("value", ["2026-13-45", "2026-13", "2026-00", "2026-9", "Sept 2026", "2026/09/01"])
 def test_invalid_or_non_iso_dates_are_not_line_charts(value):
     # Not a parseable ISO date, so it is treated as text: a bar chart of labels, never a line.
     assert kind(["period", "revenue"], [[value, 1.0], ["2026-09-01", 2.0]]) != "line"
+
+
+# --- Identifier columns are ignored when choosing bar or line -----------------------------
+
+def test_product_id_name_and_profit_is_a_bar_chart():
+    rows = [[4, "Orvexa Bluetooth Speaker", 560801.88], [45, "Nuvaro Kolhapuri Chappals", 390832.52]]
+    assert select_visualization(["product_id", "product_name", "profit"], rows) == \
+        Visualization(type="bar", x_key="product_name", y_key="profit")
+
+
+def test_category_id_name_and_revenue_is_a_bar_chart():
+    rows = [[1, "Electronics", 7371769.52], [5, "Home & Kitchen", 2788099.81], [4, "Footwear", 2655074]]
+    assert select_visualization(["category_id", "category_name", "revenue"], rows) == \
+        Visualization(type="bar", x_key="category_name", y_key="revenue")
+
+
+def test_id_and_month_and_revenue_is_a_line_chart():
+    rows = [[1, "2026-04-01", 100.0], [2, "2026-05-01", 200.0]]
+    assert select_visualization(["id", "month", "revenue"], rows) == \
+        Visualization(type="line", x_key="month", y_key="revenue")
+
+
+def test_customer_id_name_email_and_spending_is_still_a_table():
+    # Two text columns remain once the id is ignored, so there is no single category.
+    rows = [[318, "Girik Menon", "girik@example.com", 370418.49], [687, "Tanish Om", "tanish@example.org", 267573.19]]
+    assert kind(["customer_id", "full_name", "email", "total_spending"], rows) == "table"
+
+
+def test_identifier_columns_stay_in_the_result():
+    columns = ["product_id", "product_name", "profit"]
+    rows = [[4, "Speaker", 10.0], [45, "Chappals", 5.0]]
+    select_visualization(columns, rows)
+    assert columns == ["product_id", "product_name", "profit"]
+    assert rows == [[4, "Speaker", 10.0], [45, "Chappals", 5.0]]
+
+
+@pytest.mark.parametrize("columns, rows", [
+    (["product_id", "profit"], [[4, 10.0]]),
+    (["product_id", "product_name", "profit"], [[4, "Speaker", 10.0]]),
+])
+def test_one_row_with_an_identifier_is_not_a_new_kpi(columns, rows):
+    # Identifiers are ignored only on the 2+ row path, so these stay tables, as before.
+    assert kind(columns, rows) == "table"
+
+
+def test_kpi_rule_is_unchanged_for_a_single_id_named_column():
+    # One row, one number was a KPI before this rule and still is, whatever the column is called.
+    assert select_visualization(["id"], [[7]]) == Visualization(type="kpi", y_key="id")
+
+
+def test_numeric_year_is_not_treated_as_an_identifier():
+    assert kind(["year", "revenue"], [[2025, 100.0], [2026, 200.0]]) == "table"
+    assert kind(["year", "category_name", "revenue"], [[2026, "Electronics", 1.0], [2026, "Books", 2.0]]) == "table"
+
+
+@pytest.mark.parametrize("column, values", [
+    ("product_id", [4.5, 45.0]),  # not integers
+    ("product_id", ["P-4", "P-45"]),  # text codes
+    ("paid", [4, 45]),  # ends in "id" but is not "id" or "*_id"
+])
+def test_only_integer_id_or_underscore_id_columns_are_ignored(column, values):
+    rows = [[values[0], "Speaker", 10.0], [values[1], "Chappals", 5.0]]
+    assert kind([column, "product_name", "profit"], rows) == "table"
+
+
+def test_identifier_with_nulls_is_still_ignored():
+    rows = [[None, "Speaker", 10.0], [45, "Chappals", 5.0]]
+    assert kind(["product_id", "product_name", "profit"], rows) == "bar"
 
 
 # --- Table: everything else ---------------------------------------------------------------

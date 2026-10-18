@@ -7,6 +7,10 @@ The LLM is never involved: the same columns and rows always give the same choice
   2+ rows, one date + one numeric column   -> line
   anything else, or anything unclear       -> table
 
+A date is an ISO date or datetime, or a year-month such as 2026-04. For bar and line, integer
+identifier columns (id, product_id) are ignored, so "product_id, product_name, profit" is still
+a bar chart; they stay in the result and the table.
+
 The table is always shown as well; this only decides what is drawn above it.
 """
 
@@ -22,6 +26,8 @@ MAX_BAR_CATEGORIES = 50
 
 # 2026-04-01, optionally followed by a time such as T10:30:00, 10:30:00.123+05:30 or Z.
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$")
+# A month as TO_CHAR(..., 'YYYY-MM') writes it, e.g. 2026-04.
+YEAR_MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
 class Visualization(BaseModel):
@@ -45,15 +51,20 @@ def select_visualization(columns: list[str], rows: list[list[Any]]) -> Visualiza
     if len(rows) == 1 and kinds == ["numeric"] and rows[0][0] is not None:
         return Visualization(type="kpi", y_key=columns[0])
 
-    if len(rows) < 2 or len(columns) != 2 or kinds.count("numeric") != 1:
+    if len(rows) < 2:
         return TABLE
 
-    x_index = 1 - kinds.index("numeric")
+    charted = [i for i in range(len(columns)) if not _is_identifier(columns[i], [row[i] for row in rows])]
+    if len(charted) != 2 or [kinds[i] for i in charted].count("numeric") != 1:
+        return TABLE
+
+    y_index = next(i for i in charted if kinds[i] == "numeric")
+    x_index = next(i for i in charted if i != y_index)
     x_kind = kinds[x_index]
     if any(row[x_index] is None for row in rows):  # every point needs a label
         return TABLE
 
-    x_key, y_key = columns[x_index], columns[1 - x_index]
+    x_key, y_key = columns[x_index], columns[y_index]
     if x_kind == "date":
         return Visualization(type="line", x_key=x_key, y_key=y_key)
     if x_kind == "text" and len(rows) <= MAX_BAR_CATEGORIES:
@@ -75,6 +86,15 @@ def _column_kind(values: list[Any]) -> str:
     return "unknown"
 
 
+def _is_identifier(column: str, values: list[Any]) -> bool:
+    """An id column (id, product_id) of integers labels rows; it is not a measure to chart."""
+    name = column.lower()
+    if name != "id" and not name.endswith("_id"):
+        return False
+    present = [value for value in values if value is not None]
+    return bool(present) and all(isinstance(value, int) and not isinstance(value, bool) for value in present)
+
+
 def _is_number(value: Any) -> bool:
     # bool is a subclass of int, but True/False is not a measure.
     return isinstance(value, (int, float, Decimal)) and not isinstance(value, bool)
@@ -82,6 +102,8 @@ def _is_number(value: Any) -> bool:
 
 def _is_date(value: Any) -> bool:
     if isinstance(value, (date, datetime)):
+        return True
+    if isinstance(value, str) and YEAR_MONTH.match(value):
         return True
     if not isinstance(value, str) or not ISO_DATE.match(value):
         return False
