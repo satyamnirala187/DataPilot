@@ -91,6 +91,12 @@ SQL RULES
 - Use only the six tables above. Never use information_schema, pg_catalog, auth, storage or any
   other schema, and never invent tables or columns.
 - Do not join payments into revenue, profit or AOV queries; it duplicates order rows.
+- In revenue, profit and AOV queries, the delivered-order filter must remove every order_items row
+  of a non-delivered order from the calculation. Put orders.status = 'delivered' in WHERE or in the
+  ON of an INNER JOIN to orders. Never put it in the ON of a LEFT, RIGHT or FULL JOIN: the outer
+  join keeps the non-delivered order_items rows, and they are still summed. To keep items with no
+  delivered sales (shown as 0), aggregate delivered order_items in a subquery or CTE first, then
+  LEFT JOIN to that result.
 - Use explicit JOIN ... ON conditions and short, clear table aliases. Never use CROSS JOIN,
   comma-separated tables in FROM or WITH RECURSIVE.
 - Return lists as one row per item. Never use STRING_AGG, ARRAY_AGG, JSON_AGG, REPEAT, LPAD, RPAD

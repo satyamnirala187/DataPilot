@@ -220,8 +220,8 @@ LEFT JOIN orders AS o ON oi.order_id = o.order_id AND o.status = 'delivered'
 ```
 
 The filter only decides which `orders` rows join. Order items from orders that weren't delivered
-are kept (with a NULL order), so their profit is still added up. No prompt or schema-context change
-has been made for this yet.
+are kept (with a NULL order), so their profit is still added up. This was fixed after the baseline;
+see the next subsection.
 
 **Chart display (not part of the score).** Live mode judges only the returned values. The
 2026-10-15 runs also recorded which chart the app picked, and two cases that passed on correctness
@@ -235,6 +235,31 @@ did not get the expected display:
 The chart is picked by the app's deterministic rules from the columns Gemini returns, so these
 mismatches come from the shape of the generated result, not from wrong values. The cause has not
 been investigated. Batches 1–4 did not record the chart type.
+
+### After the baseline: delivered-order join fix (2026-10-19)
+
+The baseline above stays at 24/25. This is not a new full benchmark run.
+
+**Prompt fix.** One general rule was added to the shared SQL rules in `app/nl_to_sql.py`, which
+Gemini and the GroqCloud fallback both use. In revenue, profit and AOV queries, the delivered-order
+filter must remove every `order_items` row of a non-delivered order: it goes in `WHERE` or in an
+`INNER JOIN`'s `ON`, never in the `ON` of a `LEFT`, `RIGHT` or `FULL JOIN`. To keep items with no
+delivered sales, aggregate the delivered `order_items` first, then `LEFT JOIN` to that result. The
+rule names no category, product or question.
+
+**Re-runs (Gemini-only, `GROQ_API_KEY=`, current code with the fix):**
+
+| Case | Result |
+|---|---|
+| `prod_profit_electronics` | pass: all 12 products, every value correct. Gemini aggregated delivered `order_items` in a CTE, then `LEFT JOIN`ed products to it |
+| `kpi_total_revenue` | pass |
+| `kpi_total_profit` | pass |
+| `kpi_average_order_value` | pass |
+| `rank_top_products_by_profit` | pass |
+| `geo_aov_mumbai` | unavailable twice (Gemini provider errors); not judged |
+
+All 4 judged regression checks passed, and no generated query put the status filter inside an
+outer join. `geo_aov_mumbai` is counted neither as a pass nor as a fail.
 
 ### How live mode works
 
@@ -312,8 +337,8 @@ GROQ_API_KEY= .venv/bin/python -m tests.benchmark.run --live
 
 ## 12. Future Work
 
-- Address the `prod_profit_electronics` failure (status filter inside a `LEFT JOIN` condition)
-  in the prompt or schema context only if needed, then re-run that case.
-- Re-run the 10 cases last judged on 2026-10-15 on the current code.
+- Re-run `geo_aov_mumbai` with the delivered-order join fix once Gemini is available.
+- Re-run on the current code the 8 cases whose latest result is still from 2026-10-15
+  (`kpi_total_revenue` and `kpi_total_profit` have since passed with the fix).
 - Look into the two chart-display mismatches.
 - Run the whole benchmark in one pass once provider quota allows.

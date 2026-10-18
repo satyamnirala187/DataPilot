@@ -156,7 +156,8 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Write the expected answer for each benchmark question using hand-written SQL
 - [x] Run every benchmark question through the app and record pass/fail
   - Live Gemini-only baseline (2026-10-19): 24/25 pass (96%), 1 correctness failure (`prod_profit_electronics`), 0 unavailable. Assembled from runs on 2026-10-15, 2026-10-17 and 2026-10-19; details in `docs/benchmark.md` §9.
-- [ ] Improve the schema context or prompt for the failing questions and re-run
+- [x] Improve the schema context or prompt for the failing questions and re-run
+  - Added a general delivered-order join rule to the shared SQL prompt (filter in `WHERE` or an inner join, never in an outer join's `ON`). Gemini-only re-runs on 2026-10-19: `prod_profit_electronics` now passes (all 12 values correct), and 4/4 judged regression checks passed; `geo_aov_mumbai` was unavailable twice and is not judged. The recorded baseline stays 24/25. See `docs/benchmark.md` §9.
 - [x] Check that each chart rule is triggered by at least one benchmark question
 - [x] Manually test each error case (bad question, rejected SQL, timeout, empty results)
 - [x] Confirm that the validator tests cover both allowed and blocked cases and all pass

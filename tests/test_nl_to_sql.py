@@ -202,6 +202,35 @@ def test_prompt_contains_the_business_definitions(text):
     assert text in SYSTEM_INSTRUCTION
 
 
+def test_prompt_requires_the_delivered_filter_to_remove_other_orders_rows():
+    prompt = " ".join(SYSTEM_INSTRUCTION.split())  # ignore line wrapping
+    assert ("In revenue, profit and AOV queries, the delivered-order filter must remove every "
+            "order_items row of a non-delivered order from the calculation") in prompt
+    assert "Put orders.status = 'delivered' in WHERE or in the ON of an INNER JOIN to orders" in prompt
+
+
+def test_prompt_forbids_the_delivered_filter_in_an_outer_join_condition():
+    # Live benchmark failure: LEFT JOIN orders o ON ... AND o.status = 'delivered' kept the
+    # order_items of cancelled, returned and pending orders in the profit sum.
+    prompt = " ".join(SYSTEM_INSTRUCTION.split())
+    assert "Never put it in the ON of a LEFT, RIGHT or FULL JOIN" in prompt
+    assert "the outer join keeps the non-delivered order_items rows, and they are still summed" in prompt
+
+
+def test_prompt_gives_a_safe_way_to_keep_items_without_delivered_sales():
+    prompt = " ".join(SYSTEM_INSTRUCTION.split())
+    assert ("aggregate delivered order_items in a subquery or CTE first, then LEFT JOIN to that "
+            "result") in prompt
+
+
+def test_delivered_join_rule_is_general():
+    prompt = " ".join(SYSTEM_INSTRUCTION.split())
+    start = prompt.index("the delivered-order filter must remove")
+    rule = prompt[start:prompt.index("LEFT JOIN to that result")]
+    for specific in ("Electronics", "categories", "products", "product_id"):
+        assert specific not in rule
+
+
 def test_prompt_uses_the_dataset_reference_date_instead_of_current_date():
     assert DATASET_REFERENCE_DATE == "2026-09-30"
     assert "Dataset reference date: 2026-09-30" in SYSTEM_INSTRUCTION
