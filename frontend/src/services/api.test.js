@@ -7,6 +7,7 @@ import {
   clearToken,
   getAnalysis,
   getHistory,
+  deleteSavedReport,
   getSavedReport,
   getSavedReports,
   getToken,
@@ -522,6 +523,45 @@ describe('getSavedReport', () => {
     stubFetch(json(401, apiError('unauthorized')))
     await expect(getSavedReport(REPORT_ID)).rejects.toBeInstanceOf(SessionExpiredError)
     expect(getToken()).toBeNull()
+  })
+})
+
+describe('deleteSavedReport', () => {
+  it('DELETEs the encoded id with the bearer token and resolves null on 204', async () => {
+    setToken(TOKEN)
+    const fetchMock = stubFetch(new Response(null, { status: 204 }))
+    await expect(deleteSavedReport(REPORT_ID)).resolves.toBeNull()
+    const [url, options] = fetchMock.mock.calls[0]
+    expect(url).toBe(`${API_BASE_URL}/saved-reports/${REPORT_ID}`)
+    expect(options.method).toBe('DELETE')
+    expect(options.headers.Authorization).toBe(`Bearer ${TOKEN}`)
+    expect(options.body).toBeUndefined()
+  })
+
+  it('encodes path characters and refuses a missing or dot id without a request', async () => {
+    const fetchMock = stubFetch(new Response(null, { status: 204 }))
+    await deleteSavedReport('a b/c')
+    expect(fetchMock.mock.calls[0][0]).toBe(`${API_BASE_URL}/saved-reports/a%20b%2Fc`)
+    for (const bad of ['', '  ', '.', '..', null]) {
+      await expect(deleteSavedReport(bad)).rejects.toMatchObject({ code: 'invalid_request' })
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps report_not_found on 404, shows 503 safely and ends the session on 401', async () => {
+    setToken(TOKEN)
+    stubFetch(json(404, apiError('report_not_found', 'This saved report was not found.')))
+    await expect(deleteSavedReport(REPORT_ID)).rejects.toMatchObject({ status: 404, code: 'report_not_found' })
+    stubFetch(json(503, apiError('history_unavailable')))
+    await expect(deleteSavedReport(REPORT_ID)).rejects.toMatchObject({ status: 503, code: 'history_unavailable' })
+    stubFetch(json(401, apiError('unauthorized')))
+    await expect(deleteSavedReport(REPORT_ID)).rejects.toBeInstanceOf(SessionExpiredError)
+    expect(getToken()).toBeNull()
+  })
+
+  it('rejects a success that unexpectedly has a body', async () => {
+    stubFetch(json(200, { deleted: true }))
+    await expect(deleteSavedReport(REPORT_ID)).rejects.toMatchObject({ title: 'Unexpected response' })
   })
 })
 

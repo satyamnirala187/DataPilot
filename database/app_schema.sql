@@ -15,8 +15,8 @@
 --
 -- Nothing in this file drops or deletes anything, so it is safe to re-run. IF NOT EXISTS means an
 -- existing table is kept as it is: changing a column later needs a migration, not a re-run.
--- Only datapilot_app (app_role.sql) may use these tables, with SELECT and INSERT; rows are never
--- updated or deleted by the running app.
+-- Only datapilot_app (app_role.sql) may use these tables, with SELECT and INSERT, plus DELETE on
+-- saved_reports to unsave a report. Analyses are never updated or deleted by the running app.
 --
 -- Run it as the admin role in DATABASE_URL, which owns the schema and the tables (it stops
 -- otherwise). database/create_app_role.py runs this file and then app_role.sql.

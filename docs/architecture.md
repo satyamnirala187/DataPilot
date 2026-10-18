@@ -173,7 +173,7 @@ All backend code is in `backend/app/`.
 
 | Module | Responsibility |
 |---|---|
-| `main.py` | The FastAPI app: `GET /health`, `POST /query`, `POST /auth/login`, `GET /auth/session`, `POST /auth/logout`, the History and Saved Reports endpoints (`GET /history`, `GET /history/{id}`, `POST /saved-reports`, `GET /saved-reports`, `GET /saved-reports/{id}`), the request models, middleware order, exception handlers that map every error to `{"error": {"code", "message"}}`, and the rate-limit dependencies |
+| `main.py` | The FastAPI app: `GET /health`, `POST /query`, `POST /auth/login`, `GET /auth/session`, `POST /auth/logout`, the History and Saved Reports endpoints (`GET /history`, `GET /history/{id}`, `POST /saved-reports`, `GET /saved-reports`, `GET /saved-reports/{id}`, `DELETE /saved-reports/{id}`), the request models, middleware order, exception handlers that map every error to `{"error": {"code", "message"}}`, and the rate-limit dependencies |
 | `auth.py` | Private demo access: one shared login checked by the backend, short-lived HMAC-SHA256-signed bearer tokens (`v1.<expiry>.<session id>.<signature>`), in-memory logout revocation, and the `require_session` dependency that `/query` runs before anything else |
 | `config.py` | `Settings` (pydantic-settings): database URL, Gemini key and model, the optional Groq key and model, CORS origins, rate limit, timeouts, row cap. Secrets are `SecretStr`, so they never appear in logs |
 | `query_service.py` | The pipeline, `run_business_query`: generate (Gemini, then the GroqCloud fallback when configured) → validate → execute → select visualization → optional insight. Holds the fallback rules (`FALLBACK_KINDS`) and the request budgets. Defines `QueryResponse` and turns step failures into `QueryServiceError` kinds |
@@ -280,6 +280,7 @@ no endpoint calls an AI provider, regenerates SQL, runs a stored query or uses t
 | `POST /saved-reports` with `{"analysis_id", "title"}` | 201 `{"id", "analysis_id", "title", "saved_at"}`. The title is trimmed, 1-120 characters, no control characters; no other fields are accepted, so a report's content is always the stored analysis |
 | `GET /saved-reports?limit=50` (1-100) | `{"items": [{"id", "analysis_id", "title", "question", "visualization_type", "row_count", "truncated", "saved_at", "analysis_created_at"}]}`, most recently saved first |
 | `GET /saved-reports/{report_id}` | `{"id", "title", "saved_at", "analysis": {...the stored analysis...}}` |
+| `DELETE /saved-reports/{report_id}` | 204, no body. Removes only the report: its analysis stays in History and can be saved again |
 
 Errors: 404 `analysis_not_found` or `report_not_found` (the same for an id that does not exist and one
 that belongs to another account), 409 `already_saved` (one report per analysis), 400
@@ -289,11 +290,13 @@ that belongs to another account), 409 `already_saved` (one report per analysis),
 Connections are capped in the process at `datapilot_app`'s limit of 5, of which the API may use 4,
 so one is always free to record a `/query` answer; an API request that waits 5 s for a free
 connection gets the same 503 (`cause=busy`). The cap assumes the one uvicorn worker in
-`render.yaml`; more workers or instances would each need a share of the role's limit. There is no
-delete or edit in V1: `datapilot_app` has only `SELECT` and `INSERT`. Timestamps are ISO 8601 in UTC.
+`render.yaml`; more workers or instances would each need a share of the role's limit. Nothing can be
+edited, and History is never deleted: `datapilot_app` has `SELECT` and `INSERT` on both tables and
+`DELETE` only on `datapilot.saved_reports`. Timestamps are ISO 8601 in UTC.
 
 **Production status:** live since Phase 19, with `APP_DATABASE_URL` set on Render; production
-storage and every endpoint were verified after the rollout. The one shared demo login is one account,
+storage and every Phase 19 endpoint were verified after the rollout. Report removal
+(`DELETE /saved-reports/{id}`) came later and has not been verified in production yet. The one shared demo login is one account,
 so every demo visitor sees the same History and Saved Reports. There is no History or Saved Reports
 screen yet: the current frontend ignores `analysis_id` until UI V2.
 

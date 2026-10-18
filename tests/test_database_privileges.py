@@ -172,11 +172,13 @@ def test_public_and_supabase_api_roles_have_no_access_to_the_app_schema(catalog,
 
 
 @needs_database
-def test_the_app_role_can_only_select_and_insert_history_and_reports(catalog, app_schema, app_role):
+def test_the_app_role_can_only_select_and_insert_history_and_delete_reports(catalog, app_schema, app_role):
     schema_oid, tables = app_schema
     assert schema_privileges(catalog, app_role, schema_oid) == {"USAGE"}  # no CREATE
+    # No UPDATE or TRUNCATE anywhere; DELETE only on saved_reports, so History can never be deleted.
+    expected = {"analyses": {"SELECT", "INSERT"}, "saved_reports": {"SELECT", "INSERT", "DELETE"}}
     for table, oid in tables.items():
-        assert table_privileges(catalog, app_role, oid) == {"SELECT", "INSERT"}, table  # no UPDATE, DELETE, TRUNCATE
+        assert table_privileges(catalog, app_role, oid) == expected[table], table
 
 
 @needs_database

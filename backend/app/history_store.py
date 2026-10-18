@@ -9,7 +9,7 @@ Reopening History or a saved report reads the stored snapshot. Nothing here call
 regenerates SQL or runs a stored query: the stored SQL is only data that is shown again.
 
 This module connects with APP_DATABASE_URL as the role datapilot_app (SELECT and INSERT on those two
-tables, nothing on the business tables), over TLS, with short timeouts. It never uses
+tables, DELETE on saved_reports only, nothing on the business tables), over TLS, with short timeouts. It never uses
 READONLY_DATABASE_URL or the admin DATABASE_URL, and never runs generated SQL: every statement is
 fixed text with bound parameters. Data always belongs to an account (today the one shared demo
 account, auth.DEMO_ACCOUNT_ID); a saved report's account is its analysis's, so every report query
@@ -19,12 +19,13 @@ Two error contracts:
   record_analysis()  History is secondary to the answer, so it never raises. It returns a
                      HistoryResult: saved (with analysis_id), disabled (APP_DATABASE_URL not set) or
                      failed (with a safe error kind).
-  the read and save operations  The History API needs the database, so they raise
-                     HistoryUnavailable (with a safe kind) when it cannot be used, return None when
-                     the analysis or report does not exist for the account, and save_report raises
-                     AlreadySaved for an analysis that already has a report.
-Error kinds: disabled, invalid_configuration, busy, unavailable, timeout, insert_failed, query_failed,
-invalid_record, or for anything unexpected the exception's class name. None of them contains
+  the read, save and delete operations  The History API needs the database, so they raise
+                     HistoryUnavailable (with a safe kind) when it cannot be used, return None (or
+                     False, for delete_report) when the analysis or report does not exist for the
+                     account, and save_report raises AlreadySaved for an analysis that already has a
+                     report.
+Error kinds: disabled, invalid_configuration, busy, unavailable, timeout, insert_failed, delete_failed,
+query_failed, invalid_record, or for anything unexpected the exception's class name. None of them contains
 connection details, SQL, rows or the question.
 
 Connections are capped in this process (ConnectionSlots, below) to stay within datapilot_app's
@@ -114,6 +115,15 @@ GET_SAVED_REPORT = f"""
     FROM datapilot.saved_reports AS r
     JOIN datapilot.analyses AS a ON a.id = r.analysis_id
     WHERE r.id = %s AND a.account_id = %s
+"""
+
+# Removes only a report of this account (its analysis's account). The analysis itself, and so
+# History, is never touched: a report is a bookmark on it.
+DELETE_REPORT = """
+    DELETE FROM datapilot.saved_reports AS r
+    USING datapilot.analyses AS a
+    WHERE r.id = %s AND a.id = r.analysis_id AND a.account_id = %s
+    RETURNING r.id
 """
 
 
@@ -294,6 +304,13 @@ def get_saved_report(account_id: str, report_id: UUID) -> SavedReportDetail | No
             return None
         return SavedReportDetail(id=row["report_id"], title=row["report_title"], saved_at=row["saved_at"],
                                  analysis=_stored_analysis(row))
+
+
+def delete_report(account_id: str, report_id: UUID) -> bool:
+    """Remove one saved report of the account; False if the account has no such report. Its
+    analysis stays in History, and the analysis can be saved again."""
+    with _transaction(error_kind="delete_failed") as conn:
+        return conn.execute(DELETE_REPORT, (report_id, account_id)).fetchone() is not None
 
 
 def _stored_analysis(row: dict) -> StoredAnalysis:

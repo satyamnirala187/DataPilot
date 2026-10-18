@@ -17,8 +17,8 @@ from app import auth
 from app.client_ip import client_ip
 from app.config import settings
 from app.history_store import (AlreadySaved, AnalysisDetail, AnalysisSummary, HistoryUnavailable, SavedReport,
-                               SavedReportDetail, SavedReportSummary, get_analysis, get_saved_report, list_history,
-                               list_saved_reports, record_analysis, save_report)
+                               SavedReportDetail, SavedReportSummary, delete_report, get_analysis, get_saved_report,
+                               list_history, list_saved_reports, record_analysis, save_report)
 from app.middleware import CatchUnexpectedErrors, LimitRequestBody, RequestContext, SecurityHeaders, error_response
 from app.query_service import QueryResponse, QueryServiceError, run_business_query
 from app.rate_limiter import DailyLimit, RateLimiter
@@ -52,7 +52,7 @@ app.add_middleware(RequestContext)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],  # DELETE only exists for /saved-reports/{report_id}
     allow_headers=["Content-Type", "Authorization"],  # Authorization carries the demo session token
 )
 app.add_middleware(SecurityHeaders)
@@ -337,7 +337,7 @@ def enforce_daily_limit(metrics: QueryMetrics) -> None:
 
 
 # --- History and Saved Reports -------------------------------------------------------------------
-# Read stored answers and save them as reports. Everything comes from datapilot.analyses and
+# Read stored answers, save them as reports and remove saved reports. Everything comes from datapilot.analyses and
 # datapilot.saved_reports (app/history_store.py): nothing here calls Gemini, regenerates SQL, runs a
 # stored query or uses the daily cap. Data belongs to the session's account, never to its session
 # id, so it survives logout. Signed-in check first, then the per-client limit: a request without a
@@ -386,3 +386,11 @@ def saved_report_detail(report_id: UUID, session: Signed) -> SavedReportDetail:
     if report is None:
         raise AppDataError("report_not_found")
     return report
+
+
+@app.delete("/saved-reports/{report_id}", status_code=204, dependencies=APP_DATA)
+def remove_saved_report(report_id: UUID, session: Signed) -> Response:
+    """Remove one of the account's saved reports. Its analysis stays in History."""
+    if not delete_report(session.account_id, report_id):
+        raise AppDataError("report_not_found")
+    return Response(status_code=204)

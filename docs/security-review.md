@@ -63,8 +63,9 @@ could return and checks that the executor is never called.
 - The CSP's `connect-src` names the Render API origin, so a new backend URL needs both
   `VITE_API_BASE_URL` and `frontend/vercel.json` updated (`docs/deployment.md`).
 
-Not vulnerabilities, but current product limits: saved reports cannot be renamed or deleted (the
-API has no such endpoints), and answers cannot be exported.
+Not vulnerabilities, but current product limits: saved reports can be removed but not renamed
+(`DELETE /saved-reports/{id}` removes only the report; History is never deleted), and answers
+cannot be exported.
 
 ## Production verification (Phase 17 closure)
 

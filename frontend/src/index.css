@@ -3271,6 +3271,50 @@ tbody tr:last-child td {
   outline-offset: 2px;
 }
 
+/* A reopened saved report's actions: the "Saved" label and Remove, with its inline confirmation. */
+.dp-report-actions,
+.dp-remove-action,
+.dp-remove-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.dp-remove-question {
+  font-size: 14px;
+  color: var(--dp-ink);
+}
+
+.dp-remove-confirm-button,
+.dp-remove-confirm-button:hover {
+  border-color: var(--dp-error);
+  color: var(--dp-error);
+}
+
+.dp-remove-action .dp-button-quiet:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.dp-remove-error {
+  flex-basis: 100%;
+  text-align: right;
+  font-size: 14px;
+  color: var(--dp-error);
+}
+
+.dp-removed-notice {
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: var(--dp-text-muted);
+}
+
+.dp-removed-notice:focus {
+  outline: none;
+}
+
 /* Save Report dialog. The backdrop only covers the page; it is not clickable. */
 .dp-dialog-backdrop {
   position: fixed;

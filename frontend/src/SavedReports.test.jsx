@@ -199,7 +199,7 @@ describe('Saved Reports page', () => {
     expect(calls('GET', '/saved-reports')).toHaveLength(3)
   })
 
-  it('shows each report only with what the list returns, and no remove, rename or export', async () => {
+  it('shows each report only with what the list returns, and no remove, rename or export in the list', async () => {
     route({ 'GET /history': () => respond(200, { items: [] }) })
     const user = userEvent.setup()
     render(<App />)
@@ -410,6 +410,165 @@ describe('Saved Reports errors', () => {
     await openSaved(user)
     await user.click(reportRow('Monthly revenue trend'))
     await vi.waitFor(() => expect(onSessionExpired).toHaveBeenCalledTimes(1))
+  })
+})
+
+describe('removing a saved report', () => {
+  const remaining = REPORTS.filter((report) => report.id !== 'r1')
+
+  async function openReport(user) {
+    route({ 'GET /saved-reports/r1': () => respond(200, REPORT_DETAIL) })
+    await openSaved(user)
+    await user.click(reportRow('Monthly revenue trend'))
+    await screen.findByRole('heading', { name: 'Data' })
+  }
+
+  function confirmGroup() {
+    return screen.getByRole('group', { name: /Remove “Monthly revenue trend” from Saved Reports\?/ })
+  }
+
+  it('asks to confirm first, and Cancel removes nothing', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await openReport(user)
+    await user.click(screen.getByRole('button', { name: 'Remove from Saved Reports' }))
+    expect(confirmGroup()).toHaveTextContent('The analysis stays in History.')
+    expect(within(confirmGroup()).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    expect(calls('DELETE', '/saved-reports/r1')).toHaveLength(0)
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('group')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove from Saved Reports' })).toHaveFocus()
+    expect(calls('DELETE', '/saved-reports/r1')).toHaveLength(0)
+  })
+
+  it('removes the report, returns to the list without it and updates the sidebar count at once', async () => {
+    let finishRefresh
+    const user = userEvent.setup()
+    render(<App />)
+    await openReport(user)
+    expect(badge()).toHaveTextContent('3')
+    route({
+      'DELETE /saved-reports/r1': () => Promise.resolve(new Response(null, { status: 204 })),
+      // The count is read again after removing; hold that answer to see the immediate update.
+      'GET /saved-reports': () => new Promise((resolve) => (finishRefresh = () => resolve(new Response(JSON.stringify({ items: remaining }), { status: 200 })))),
+    })
+    await user.click(screen.getByRole('button', { name: 'Remove from Saved Reports' }))
+    await user.click(screen.getByRole('button', { name: 'Remove report' }))
+
+    await screen.findByRole('heading', { level: 1, name: 'Saved Reports' })
+    expect(screen.getByRole('status')).toHaveTextContent('Removed “Monthly revenue trend” from Saved Reports.')
+    expect(screen.getByRole('status')).toHaveFocus()
+    expect(screen.queryByRole('button', { name: /^Monthly revenue trend/ })).not.toBeInTheDocument()
+    expect(reportRow('Top customers')).toBeInTheDocument()
+    expect(badge()).toHaveTextContent('2')
+
+    await act(async () => finishRefresh())
+    expect(badge()).toHaveTextContent('2')
+    expect(calls('DELETE', '/saved-reports/r1')).toHaveLength(1)
+    expect(fetchMock.mock.calls.filter(([url, options = {}]) => options.method === 'DELETE' && !new URL(url).pathname.startsWith('/saved-reports/'))).toHaveLength(0)
+  })
+
+  it('removing the last report shows the empty state and no badge', async () => {
+    route({ 'GET /saved-reports': () => respond(200, { items: [REPORTS[0]] }) })
+    const user = userEvent.setup()
+    render(<App />)
+    await openReport(user)
+    route({
+      'DELETE /saved-reports/r1': () => Promise.resolve(new Response(null, { status: 204 })),
+      'GET /saved-reports': () => respond(200, { items: [] }),
+    })
+    await user.click(screen.getByRole('button', { name: 'Remove from Saved Reports' }))
+    await user.click(screen.getByRole('button', { name: 'Remove report' }))
+    expect(await screen.findByRole('heading', { name: 'No saved reports yet' })).toBeInTheDocument()
+    expect(badge()).toBeNull()
+  })
+
+  it('sends one removal even if Remove report is pressed twice, and shows it is working', async () => {
+    let finish
+    const user = userEvent.setup()
+    render(<App />)
+    await openReport(user)
+    route({ 'DELETE /saved-reports/r1': () => new Promise((resolve) => (finish = resolve)) })
+    await user.click(screen.getByRole('button', { name: 'Remove from Saved Reports' }))
+    const confirm = screen.getByRole('button', { name: 'Remove report' })
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    expect(screen.getByRole('button', { name: 'Removing…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    expect(calls('DELETE', '/saved-reports/r1')).toHaveLength(1)
+    route({ 'GET /saved-reports': () => respond(200, { items: remaining }) })
+    await act(async () => finish(new Response(null, { status: 204 })))
+    await screen.findByRole('heading', { level: 1, name: 'Saved Reports' })
+  })
+
+  it('keeps the report and says so when removing fails', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await openReport(user)
+    route({ 'DELETE /saved-reports/r1': () => respond(503, errorBody('history_unavailable', 'History is not available right now.')) })
+    await user.click(screen.getByRole('button', { name: 'Remove from Saved Reports' }))
+    await user.click(screen.getByRole('button', { name: 'Remove report' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Saved Reports unavailable: Saved Reports are not available right now. Please try again later.')
+    expect(screen.getByRole('heading', { name: 'Data' })).toBeInTheDocument() // still on the report
+    expect(screen.getByRole('button', { name: 'Remove report' })).toBeEnabled() // can try again
+    expect(badge()).toHaveTextContent('3')
+
+    await user.click(screen.getByRole('button', { name: 'Back to Saved Reports' }))
+    expect(reportRow('Monthly revenue trend')).toBeInTheDocument()
+  })
+
+  it('treats a report that is already gone (404) as removed', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await openReport(user)
+    route({
+      'DELETE /saved-reports/r1': () => respond(404, errorBody('report_not_found', 'This saved report was not found.')),
+      'GET /saved-reports': () => respond(200, { items: remaining }),
+    })
+    await user.click(screen.getByRole('button', { name: 'Remove from Saved Reports' }))
+    await user.click(screen.getByRole('button', { name: 'Remove report' }))
+    await screen.findByRole('heading', { level: 1, name: 'Saved Reports' })
+    expect(screen.queryByRole('button', { name: /^Monthly revenue trend/ })).not.toBeInTheDocument()
+  })
+
+  it('ends the session when removing gets 401', async () => {
+    const onSessionExpired = vi.fn()
+    const user = userEvent.setup()
+    render(<App onSessionExpired={onSessionExpired} />)
+    await openReport(user)
+    route({ 'DELETE /saved-reports/r1': () => respond(401, errorBody('unauthorized', 'x')) })
+    await user.click(screen.getByRole('button', { name: 'Remove from Saved Reports' }))
+    await user.click(screen.getByRole('button', { name: 'Remove report' }))
+    await vi.waitFor(() => expect(onSessionExpired).toHaveBeenCalledTimes(1))
+  })
+
+  it('lets an answer saved in this session be saved again after its report is removed', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await askFresh(user)
+    route({
+      'POST /saved-reports': () => respond(201, SAVED),
+      'GET /saved-reports': () => respond(200, { items: [{ ...REPORTS[0], id: 'r9', analysis_id: 'fresh-1', title: 'Customer count' }] }),
+      'GET /saved-reports/r9': () => respond(200, { ...REPORT_DETAIL, id: 'r9', title: 'Customer count', analysis: { ...REPORT_DETAIL.analysis, id: 'fresh-1' } }),
+    })
+    const dialog = await openSaveDialog(user)
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await screen.findByText('Saved', { selector: '.dp-saved-state' })
+
+    await openSaved(user)
+    await user.click(reportRow('Customer count'))
+    await screen.findByRole('heading', { name: 'Data' })
+    route({
+      'DELETE /saved-reports/r9': () => Promise.resolve(new Response(null, { status: 204 })),
+      'GET /saved-reports': () => respond(200, { items: [] }),
+    })
+    await user.click(screen.getByRole('button', { name: 'Remove from Saved Reports' }))
+    await user.click(screen.getByRole('button', { name: 'Remove report' }))
+    await screen.findByRole('heading', { name: 'No saved reports yet' })
+
+    await user.click(navButton('Ask DataPilot'))
+    expect(await screen.findByRole('button', { name: 'Save Report' })).toBeInTheDocument()
   })
 })
 

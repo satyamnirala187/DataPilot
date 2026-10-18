@@ -268,6 +268,18 @@ export async function getSavedReport(reportId) {
   })
 }
 
+/**
+ * DELETE /saved-reports/{id}: remove one saved report (its analysis stays in History). Resolves
+ * with null (204, no body). A report that no longer exists is an ApiError with status 404.
+ */
+export async function deleteSavedReport(reportId) {
+  return requestJson(`/saved-reports/${pathId(reportId)}`, {
+    method: 'DELETE',
+    errors: APP_DATA_ERRORS,
+    isValid: (data) => data === null,
+  })
+}
+
 // Caller mistakes are refused before any request is sent. The backend still checks everything.
 function invalidInput(message) {
   return new ApiError('Invalid request', message, null, 'invalid_request')

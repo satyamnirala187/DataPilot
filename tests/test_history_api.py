@@ -2,6 +2,7 @@
 
   GET  /history               GET /history/{analysis_id}
   POST /saved-reports         GET /saved-reports         GET /saved-reports/{report_id}
+  DELETE /saved-reports/{report_id}
 
 The endpoints use conftest's FakeHistory, an in-memory store with the real store's rules; a few
 tests swap in the real store with a failing fake connection. Nothing reaches a database or Gemini.
@@ -53,7 +54,8 @@ def endpoints(analysis_id=None, report_id=None):
     analysis_id, report_id = analysis_id or uuid4(), report_id or uuid4()
     return [("GET", "/history", None), ("GET", f"/history/{analysis_id}", None),
             ("POST", "/saved-reports", {"analysis_id": str(analysis_id), "title": "A title"}),
-            ("GET", "/saved-reports", None), ("GET", f"/saved-reports/{report_id}", None)]
+            ("GET", "/saved-reports", None), ("GET", f"/saved-reports/{report_id}", None),
+            ("DELETE", f"/saved-reports/{report_id}", None)]
 
 
 def call(method, path, json=None, **kwargs):
@@ -111,20 +113,30 @@ def test_the_history_limit_is_separate_from_the_ai_limits(fake_history, monkeypa
     assert main.APP_DATA_REQUESTS_PER_MINUTE == 60
 
 
-@pytest.mark.parametrize("method", ["DELETE", "PUT", "PATCH"])
+@pytest.mark.parametrize("method", ["PUT", "PATCH"])
 @pytest.mark.parametrize("path", ["/history", "/history/{id}", "/saved-reports", "/saved-reports/{id}"])
-def test_nothing_can_be_deleted_or_edited(fake_history, method, path):
+def test_nothing_can_be_edited(fake_history, method, path):
     assert_error(call(method, path.format(id=uuid4())), 405, "method_not_allowed")
     assert fake_history.api_calls == []
 
 
-def test_cors_still_allows_only_get_and_post(fake_history):
+@pytest.mark.parametrize("path", ["/history", "/history/{id}", "/saved-reports"])
+def test_only_a_single_saved_report_can_be_deleted(fake_history, path):
+    # History (analyses) can never be deleted, and there is no "delete all reports".
+    assert_error(call("DELETE", path.format(id=uuid4())), 405, "method_not_allowed")
+    assert fake_history.api_calls == []
+
+
+def test_cors_allows_get_post_and_delete_only(fake_history):
     preflight = {"Origin": FRONTEND_ORIGIN, "Access-Control-Request-Headers": "authorization"}
     ok = client.options("/saved-reports", headers=preflight | {"Access-Control-Request-Method": "POST"})
     assert ok.status_code == 200 and ok.headers["access-control-allow-origin"] == FRONTEND_ORIGIN
-    refused = client.options(f"/saved-reports/{uuid4()}", headers=preflight | {"Access-Control-Request-Method": "DELETE"})
-    assert refused.status_code == 400
-    assert "DELETE" not in ok.headers["access-control-allow-methods"]
+    delete = client.options(f"/saved-reports/{uuid4()}", headers=preflight | {"Access-Control-Request-Method": "DELETE"})
+    assert delete.status_code == 200 and delete.headers["access-control-allow-origin"] == FRONTEND_ORIGIN
+    for method in ("PUT", "PATCH"):
+        refused = client.options(f"/saved-reports/{uuid4()}", headers=preflight | {"Access-Control-Request-Method": method})
+        assert refused.status_code == 400
+        assert method not in ok.headers["access-control-allow-methods"]
 
 
 # --- GET /history ----------------------------------------------------------------------------
@@ -338,6 +350,58 @@ def test_unknown_and_other_account_reports_look_the_same(fake_history):
     unknown, other = client.get(f"/saved-reports/{uuid4()}"), client.get(f"/saved-reports/{their_report.id}")
     assert_error(unknown, 404, "report_not_found")
     assert other.status_code == 404 and other.json() == unknown.json()
+
+
+# --- DELETE /saved-reports/{report_id} -----------------------------------------------------------
+
+def test_deleting_a_saved_report_returns_204_and_removes_it(fake_history):
+    analysis = fake_history.add_analysis()
+    report = save(analysis.id, "Quarterly Revenue").json()
+    response = client.delete(f"/saved-reports/{report['id']}")
+    assert response.status_code == 204 and response.content == b""
+    assert client.get("/saved-reports").json()["items"] == []
+    assert_error(client.get(f"/saved-reports/{report['id']}"), 404, "report_not_found")
+    assert ("delete_report", "demo") in fake_history.api_calls
+
+
+def test_deleting_a_report_keeps_its_analysis_in_history(fake_history):
+    analysis = fake_history.add_analysis(question="Revenue by city?")
+    report = save(analysis.id).json()
+    client.delete(f"/saved-reports/{report['id']}")
+    [summary] = client.get("/history").json()["items"]
+    assert summary["id"] == str(analysis.id) and summary["saved_report_id"] is None
+    detail = client.get(f"/history/{analysis.id}").json()
+    assert detail["question"] == "Revenue by city?" and detail["saved_report"] is None
+    assert analysis.id in fake_history.analyses
+
+
+def test_a_deleted_report_can_be_saved_again(fake_history):
+    analysis = fake_history.add_analysis()
+    first = save(analysis.id, "First").json()
+    client.delete(f"/saved-reports/{first['id']}")
+    second = save(analysis.id, "Second")
+    assert second.status_code == 201 and second.json()["id"] != first["id"]
+
+
+def test_deleting_twice_or_an_unknown_report_is_404(fake_history):
+    report = save(fake_history.add_analysis().id).json()
+    assert client.delete(f"/saved-reports/{report['id']}").status_code == 204
+    assert_error(client.delete(f"/saved-reports/{report['id']}"), 404, "report_not_found")
+    assert_error(client.delete(f"/saved-reports/{uuid4()}"), 404, "report_not_found")
+
+
+def test_another_accounts_report_cannot_be_deleted_and_looks_unknown(fake_history):
+    theirs = fake_history.add_analysis(account_id="someone-else")
+    their_report = fake_history.save_report("someone-else", theirs.id, "Theirs")
+    other, unknown = client.delete(f"/saved-reports/{their_report.id}"), client.delete(f"/saved-reports/{uuid4()}")
+    assert other.status_code == 404 and other.json() == unknown.json()
+    assert their_report.id in fake_history.reports  # still there
+
+
+@pytest.mark.parametrize("bad_id", ["not-a-uuid", "1", "00000000-0000-0000-0000"])
+def test_deleting_with_a_malformed_id_is_an_invalid_request(fake_history, bad_id):
+    assert_error(client.delete(f"/saved-reports/{bad_id}"), 400, "invalid_request")
+    assert fake_history.api_calls == []
 
 
 # --- When the History database cannot be used --------------------------------------------------

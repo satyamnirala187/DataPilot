@@ -4,6 +4,7 @@ import { SAVED_LIST_LIMIT } from '../hooks/useSavedReports.js'
 import { describeHistoryItem, historyKind, kindIcon, parseTimestamp } from '../utils/history.js'
 import { SAVED_REPORTS_UNAVAILABLE, filterSavedReports, formatSavedDate, isSavedReportsUnavailable } from '../utils/savedReports.js'
 import ErrorMessage from './ErrorMessage.jsx'
+import RemoveReportAction from './RemoveReportAction.jsx'
 import Icon from './Icon.jsx'
 import { PageBar, PageSkeleton } from './PageLoader.jsx'
 import ResultView from './ResultView.jsx'
@@ -17,19 +18,22 @@ const TEMPORARY_STATUSES = new Set([null, 429, 503, 504])
  * the loaded list also updates the sidebar count (onListLoaded).
  *
  * Reopening reads GET /saved-reports/{id}: the question is never asked again, and the Ask page's
- * own question and answer are not touched. There is no remove, rename or export here.
+ * own question and answer are not touched. An open report can be removed (onRemoveReport, after an
+ * inline confirmation): the page then returns to the list without it. There is no rename or export.
  *
  * listRequest changes when Saved Reports is chosen again while open: an open report then closes
  * back to the list (without reloading it).
  */
-export default function SavedReportsPage({ listRequest = 0, onSessionExpired, onListLoaded }) {
+export default function SavedReportsPage({ listRequest = 0, onSessionExpired, onListLoaded, onRemoveReport }) {
   const [list, setList] = useState({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
   const [search, setSearch] = useState('')
   const [detail, setDetail] = useState(null) // { request, id, status: loading | ready | error, report, error }
   const [returnFocus, setReturnFocus] = useState(null)
+  const [removedNotice, setRemovedNotice] = useState('')
   const rowRefs = useRef(new Map())
   const backRef = useRef(null)
+  const noticeRef = useRef(null)
 
   // The latest callbacks, without making them a reason to reload the list.
   const callbacks = useRef({ onSessionExpired, onListLoaded })
@@ -67,6 +71,11 @@ export default function SavedReportsPage({ listRequest = 0, onSessionExpired, on
     if (!showingDetail && returnFocus) rowRefs.current.get(returnFocus)?.focus()
   }, [showingDetail, returnFocus])
 
+  // After a removal the report's row is gone, so focus goes to the notice that says so.
+  useEffect(() => {
+    if (!showingDetail && removedNotice) noticeRef.current?.focus()
+  }, [showingDetail, removedNotice])
+
   function retryList() {
     setList({ status: 'loading' })
     setAttempt((count) => count + 1)
@@ -98,12 +107,34 @@ export default function SavedReportsPage({ listRequest = 0, onSessionExpired, on
   }
 
   function backToList() {
+    setRemovedNotice('')
     setReturnFocus(detail.id)
     setDetail(null)
   }
 
+  // Remove the open report; on success it leaves this page's list at once and the list shows again.
+  async function removeReport() {
+    const { id, report } = detail
+    const outcome = await onRemoveReport(id, report.analysis.id)
+    if (outcome.status === 'removed') {
+      setList((state) => (state.status === 'ready' ? { ...state, items: state.items.filter((item) => item.id !== id) } : state))
+      setReturnFocus(null)
+      setRemovedNotice(`Removed “${report.title}” from Saved Reports.`)
+      setDetail(null)
+    }
+    return outcome
+  }
+
   if (showingDetail) {
-    return <ReportDetail detail={detail} backRef={backRef} onBack={backToList} onRetry={retryReport} />
+    return (
+      <ReportDetail
+        detail={detail}
+        backRef={backRef}
+        onBack={backToList}
+        onRetry={retryReport}
+        onRemove={onRemoveReport ? removeReport : null}
+      />
+    )
   }
   if (list.status === 'loading') {
     return (
@@ -120,6 +151,11 @@ export default function SavedReportsPage({ listRequest = 0, onSessionExpired, on
   return (
     <div className="dp-page dp-saved">
       <SavedHeader search={hasReports ? search : null} onSearch={setSearch} />
+      {removedNotice && (
+        <p ref={noticeRef} tabIndex={-1} role="status" className="dp-removed-notice">
+          {removedNotice}
+        </p>
+      )}
 
       {list.status === 'error' ? (
         <ErrorMessage title={list.error.title} message={list.error.message} tone={list.error.tone}>
@@ -238,11 +274,11 @@ function BackButton({ backRef, onBack }) {
 
 /**
  * A reopened report: its title and saved date, then the stored analysis in the same ResultView as
- * a fresh answer (whose heading stays the original question). It is already saved, so the only
- * action is the quiet "Saved" label. The page and Back button stay the same element from loading
- * to loaded, so keyboard focus stays on Back.
+ * a fresh answer (whose heading stays the original question). It is already saved, so its actions
+ * are the quiet "Saved" label and "Remove from Saved Reports". The page and Back button stay the
+ * same element from loading to loaded, so keyboard focus stays on Back.
  */
-function ReportDetail({ detail, backRef, onBack, onRetry }) {
+function ReportDetail({ detail, backRef, onBack, onRetry, onRemove }) {
   const report = detail.report
   return (
     <>
@@ -262,10 +298,13 @@ function ReportDetail({ detail, backRef, onBack, onRetry }) {
             <ResultView
               result={report.analysis}
               actions={
-                <p className="dp-saved-state">
-                  <Icon name="bookmark" size={16} strokeWidth={1.8} />
-                  Saved
-                </p>
+                <div className="dp-report-actions">
+                  <p className="dp-saved-state">
+                    <Icon name="bookmark" size={16} strokeWidth={1.8} />
+                    Saved
+                  </p>
+                  {onRemove && <RemoveReportAction title={report.title} onRemove={onRemove} />}
+                </div>
               }
             />
           </>

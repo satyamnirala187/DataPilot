@@ -1,7 +1,8 @@
 """Tests for the History and Saved Reports database foundation (Phase 19, batch 1).
 
 database/app_schema.sql   schema datapilot, tables analyses and saved_reports
-database/app_role.sql     role datapilot_app: SELECT and INSERT on those two tables only
+database/app_role.sql     role datapilot_app: SELECT and INSERT on those two tables, DELETE on
+                          saved_reports only
 database/create_app_role.py  runs both files and writes APP_DATABASE_URL to .env
 
 These read the SQL files and run the setup script against a fake connection: nothing connects to a
@@ -99,8 +100,8 @@ def test_every_object_is_created_only_if_missing_and_lives_in_schema_datapilot()
 
 @pytest.mark.parametrize("sql", [APP_SCHEMA, APP_ROLE], ids=["app_schema.sql", "app_role.sql"])
 def test_the_setup_files_never_drop_or_delete_anything(sql):
-    # ON DELETE RESTRICT is a foreign-key rule, not a statement.
-    statements = sql.replace("ON DELETE RESTRICT", "")
+    # ON DELETE RESTRICT is a foreign-key rule and GRANT DELETE a privilege, not statements.
+    statements = sql.replace("ON DELETE RESTRICT", "").replace("GRANT DELETE ON datapilot.saved_reports", "")
     assert re.findall(r"\b(DROP|TRUNCATE|DELETE|UPDATE)\b", statements, flags=re.IGNORECASE) == []
 
 
@@ -159,15 +160,19 @@ def test_app_role_starts_from_nothing_in_both_schemas():
     assert APP_ROLE.rindex("REVOKE ALL") < APP_ROLE.index("GRANT")
 
 
-def test_app_role_gets_exactly_select_and_insert_on_the_two_tables():
+def test_app_role_gets_select_and_insert_on_the_two_tables_and_delete_on_reports_only():
     assert re.findall(r"\bGRANT\b[^;']*", APP_ROLE) == [
         "GRANT CONNECT ON DATABASE %I TO datapilot_app",
         "GRANT USAGE ON SCHEMA datapilot TO datapilot_app",
         "GRANT SELECT, INSERT ON datapilot.analyses, datapilot.saved_reports TO datapilot_app",
+        "GRANT DELETE ON datapilot.saved_reports TO datapilot_app",
     ]
     grants = " ".join(re.findall(r"\bGRANT\b[^;']*", APP_ROLE))
-    for privilege in ("UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER", "CREATE", "ALL"):
+    for privilege in ("UPDATE", "TRUNCATE", "REFERENCES", "TRIGGER", "CREATE", "ALL"):
         assert privilege not in grants
+    # DELETE is granted on saved_reports alone: History (analyses) can never be deleted.
+    assert [grant for grant in re.findall(r"\bGRANT\b[^;']*", APP_ROLE) if "DELETE" in grant] == [
+        "GRANT DELETE ON datapilot.saved_reports TO datapilot_app"]
     assert not any(table in grants for table in BUSINESS_TABLES)
 
 

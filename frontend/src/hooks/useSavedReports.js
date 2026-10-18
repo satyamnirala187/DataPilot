@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, SessionExpiredError, getSavedReports, saveReport } from '../services/api.js'
+import { ApiError, SessionExpiredError, deleteSavedReport, getSavedReports, saveReport } from '../services/api.js'
 
 // How many saved reports one list request reads. The API has no total count, so a full page means
 // "at least this many", never an exact total.
@@ -7,8 +7,9 @@ export const SAVED_LIST_LIMIT = 50
 
 /**
  * The account's saved-report state for the signed-in app: the sidebar badge, whether an analysis
- * is saved, and saving one. The list is read once when the app opens (without blocking anything),
- * again after each save, and whenever the Saved Reports page loads it (replaceList).
+ * is saved, saving one and removing one. The list is read once when the app opens (without blocking
+ * anything), again after each save or removal, and whenever the Saved Reports page loads it
+ * (replaceList).
  *
  * Nothing here is guessed: with no successful list there is no badge, and an analysis counts as
  * saved only from a loaded list, a report saved in this session, or the backend saying so (409).
@@ -71,6 +72,35 @@ export function useSavedReports(onSessionExpired) {
     [markSaved, refresh],
   )
 
+  /**
+   * Remove a saved report: one DELETE /saved-reports/{id}. Resolves { status: 'removed' } (also for
+   * 404: it is already gone) or { status: 'expired' }; any other failure is thrown for the page to
+   * show. The report leaves the count at once, its analysis is no longer "saved", and the list is
+   * read again so the badge follows the backend. The analysis itself stays in History.
+   */
+  const remove = useCallback(
+    async (reportId, analysisId) => {
+      try {
+        await deleteSavedReport(reportId)
+      } catch (error) {
+        if (error instanceof SessionExpiredError) {
+          sessionExpired.current?.()
+          return { status: 'expired' }
+        }
+        if (!(error instanceof ApiError && error.status === 404)) throw error
+      }
+      setItems((current) => current && current.filter((item) => item.id !== reportId))
+      setSavedNow((current) => {
+        const next = new Set(current)
+        next.delete(analysisId)
+        return next
+      })
+      refresh()
+      return { status: 'removed' }
+    },
+    [refresh],
+  )
+
   const isSaved = useCallback(
     (analysisId) => Boolean(analysisId) && (savedNow.has(analysisId) || Boolean(items?.some((item) => item.analysis_id === analysisId))),
     [items, savedNow],
@@ -80,5 +110,5 @@ export function useSavedReports(onSessionExpired) {
   // while unknown or when there are none.
   const badge = items === null || items.length === 0 ? null : items.length >= SAVED_LIST_LIMIT ? `${SAVED_LIST_LIMIT}+` : String(items.length)
 
-  return { badge, isSaved, save, replaceList: setItems }
+  return { badge, isSaved, save, remove, replaceList: setItems }
 }

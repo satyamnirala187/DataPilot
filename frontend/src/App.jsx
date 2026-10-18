@@ -130,7 +130,12 @@ export default function App({ onLogout = () => {}, onSessionExpired = () => {} }
         />
       )}
       {view === 'saved' && (
-        <SavedReportsPage listRequest={savedRequest} onSessionExpired={onSessionExpired} onListLoaded={savedReports.replaceList} />
+        <SavedReportsPage
+          listRequest={savedRequest}
+          onSessionExpired={onSessionExpired}
+          onListLoaded={savedReports.replaceList}
+          onRemoveReport={savedReports.remove}
+        />
       )}
       {view === 'ask' && (
         <AskPage

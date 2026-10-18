@@ -161,18 +161,19 @@ that tables outside the six cannot be read.
 
 **DataPilot's own tables are out of reach too (History and Saved Reports).** They live
 in a separate schema, `datapilot` (`database/app_schema.sql`), written only by the role
-`datapilot_app` (`database/app_role.sql`: `SELECT` and `INSERT` on its two tables, nothing on the
-business tables). Three separate layers keep generated SQL away from them: the validator allows
+`datapilot_app` (`database/app_role.sql`: `SELECT` and `INSERT` on its two tables, `DELETE` only on
+`datapilot.saved_reports`, nothing on the business tables). Three separate layers keep generated SQL away from them: the validator allows
 only the six tables in `public`; `datapilot_readonly` has no access to schema `datapilot` at all;
 and the prompt never mentions them. `PUBLIC`, `anon` and `authenticated` have no access either.
 Tests cover each layer (`tests/test_sql_validator.py`, `tests/test_app_schema.py`, and live catalog
 checks against the hosted database in `tests/test_database_privileges.py`).
-The History and Saved Reports API (live in production) only reads these snapshots and
-adds reports: every endpoint requires a demo session, every query is scoped to the session's account
+The History and Saved Reports API (live in production; report removal is newer and not yet
+verified there) only reads these snapshots, adds reports and removes them: every endpoint requires a demo session, every query is scoped to the session's account
 (a report through its analysis), the request body for saving accepts only an analysis id and a
 title, and nothing it does calls Gemini or runs SQL against the business tables.
-Saved reports cannot be edited or deleted in V1. Because the demo has one shared login, History and
-Saved Reports are shared by everyone who uses it.
+Saved reports can be removed but not edited. Removing one deletes only the report row, never its
+analysis: History is never deleted. Because the demo has one shared login, History and Saved
+Reports are shared by everyone who uses it, so anyone using it can remove a report.
 
 ## 6. Execution limits
 

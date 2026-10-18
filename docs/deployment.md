@@ -321,7 +321,8 @@ const reports = await (await fetch(`${api}/saved-reports`, {headers: auth})).jso
 console.log(reports.items.length, (await fetch(`${api}/saved-reports/${reports.items[0].id}`, {headers: auth})).status)  // 1 200
 ```
 
-A saved report is permanent: V1 has no delete, so choose a title worth keeping, or skip the save.
+A saved report can be removed again (`DELETE /saved-reports/{id}`, 204); its analysis stays in
+History, which is never deleted.
 None of these requests calls Gemini, runs SQL on the business tables or uses the daily cap.
 
 ### Rolling back

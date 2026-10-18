@@ -20,10 +20,10 @@ from pydantic import SecretStr
 from app import history_store
 from app.chart_selector import Visualization
 from app.config import settings
-from app.history_store import (ANALYSIS_EXISTS, DISABLED, GET_ANALYSIS, GET_SAVED_REPORT, INSERT_ANALYSIS,
-                               LIST_HISTORY, LIST_SAVED_REPORTS, SAVE_REPORT, AlreadySaved, HistoryResult,
-                               HistoryUnavailable, get_analysis, get_saved_report, list_history, list_saved_reports,
-                               record_analysis, save_report)
+from app.history_store import (ANALYSIS_EXISTS, DELETE_REPORT, DISABLED, GET_ANALYSIS, GET_SAVED_REPORT,
+                               INSERT_ANALYSIS, LIST_HISTORY, LIST_SAVED_REPORTS, SAVE_REPORT, AlreadySaved,
+                               HistoryResult, HistoryUnavailable, delete_report, get_analysis, get_saved_report,
+                               list_history, list_saved_reports, record_analysis, save_report)
 from app.query_service import QueryResponse
 
 APP_URL = "postgresql://datapilot_app:app-secret-pw@app-db.example.test:5432/postgres"
@@ -310,7 +310,8 @@ STORED = {
     "visualization": {"type": "bar", "x_key": "name", "y_key": "revenue"}, "insight": "Toys lead.",
     "created_at": CREATED,
 }
-API_STATEMENTS = (LIST_HISTORY, GET_ANALYSIS, SAVE_REPORT, ANALYSIS_EXISTS, LIST_SAVED_REPORTS, GET_SAVED_REPORT)
+API_STATEMENTS = (LIST_HISTORY, GET_ANALYSIS, SAVE_REPORT, ANALYSIS_EXISTS, LIST_SAVED_REPORTS, GET_SAVED_REPORT,
+                  DELETE_REPORT)
 
 
 def run(db, operation, *args, results=()):
@@ -414,17 +415,39 @@ def test_get_saved_report_returns_the_full_stored_analysis(db):
     assert run(db, get_saved_report, "demo", REPORT_ID, results=[None]) is None
 
 
+def test_delete_report_removes_only_the_accounts_report(db):
+    db.connection = FakeConnection(row=(REPORT_ID,))
+    assert delete_report("demo", REPORT_ID) is True
+    assert api_statements(db) == [(DELETE_REPORT, (REPORT_ID, "demo"))]
+    assert "WHERE r.id = %s AND a.id = r.analysis_id AND a.account_id = %s" in DELETE_REPORT
+    assert db.connection.read_only is False and db.connection.events == ["begin", "commit", "close"]
+
+
+def test_deleting_a_report_the_account_does_not_have_is_false(db):
+    db.connection = FakeConnection(row=None)
+    assert delete_report("demo", REPORT_ID) is False
+    assert db.connection.events == ["begin", "commit", "close"]  # nothing was deleted
+
+
+def test_delete_report_deletes_from_saved_reports_and_never_from_analyses():
+    assert DELETE_REPORT.split("USING")[0].split() == ["DELETE", "FROM", "datapilot.saved_reports", "AS", "r"]
+    # analyses appears only in USING, to read the account: it is never a DELETE target.
+    assert re.findall(r"DELETE FROM (\S+)", DELETE_REPORT) == ["datapilot.saved_reports"]
+    assert "USING datapilot.analyses AS a" in DELETE_REPORT
+
+
 def test_reports_are_always_scoped_through_their_analysis():
     # saved_reports has no account column: every report query joins analyses and filters its account.
-    for sql in (SAVE_REPORT, LIST_SAVED_REPORTS, GET_SAVED_REPORT):
+    for sql in (SAVE_REPORT, LIST_SAVED_REPORTS, GET_SAVED_REPORT, DELETE_REPORT):
         assert "datapilot.analyses AS a" in sql and "a.account_id = %s" in sql
     for sql in (LIST_HISTORY, GET_ANALYSIS, ANALYSIS_EXISTS):
         assert "account_id = %s" in sql
 
 
-def test_api_statements_are_fixed_and_never_change_or_delete_data():
+def test_api_statements_are_fixed_and_only_delete_saved_reports():
     for sql in API_STATEMENTS:
-        assert re.findall(r"\b(UPDATE|DELETE|TRUNCATE|DROP|ALTER)\b", sql) == []
+        assert re.findall(r"\b(UPDATE|TRUNCATE|DROP|ALTER)\b", sql) == []
+        assert re.findall(r"\bDELETE\b", sql) == (["DELETE"] if sql is DELETE_REPORT else [])
         assert "{" not in sql and "%(" not in sql  # fixed text; only %s parameters
         assert "public." not in sql and "datapilot." in sql
 
@@ -448,6 +471,7 @@ OPERATIONS = [
     (save_report, ("demo", ANALYSIS_ID, "Title"), "insert_failed"),
     (list_saved_reports, ("demo", 50), "query_failed"),
     (get_saved_report, ("demo", REPORT_ID), "query_failed"),
+    (delete_report, ("demo", REPORT_ID), "delete_failed"),
 ]
 
 

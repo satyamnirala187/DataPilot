@@ -54,7 +54,8 @@ class FakeHistory:
     Called directly, it is record_analysis (POST /query): it records each call and returns .result,
     by default "saved" with ANALYSIS_ID, without storing anything. Its other methods are the History
     and Saved Reports API operations, over an in-memory store with the same rules as the real one:
-    data belongs to an account, a report's account is its analysis's, one report per analysis.
+    data belongs to an account, a report's account is its analysis's, one report per analysis, and
+    deleting a report never removes its analysis.
     Seed it with add_analysis(); set .fail_with to an exception that every API operation raises.
     tests/test_history_store.py tests the real store against a fake connection."""
 
@@ -124,6 +125,14 @@ class FakeHistory:
         return SavedReportDetail(id=report.id, title=report.title, saved_at=report.saved_at,
                                  analysis=mine[report.analysis_id])
 
+    def delete_report(self, account_id, report_id):
+        mine = self._mine("delete_report", account_id)
+        report = self.reports.get(report_id)
+        if report is None or report.analysis_id not in mine:
+            return False
+        del self.reports[report_id]
+        return True
+
     def _mine(self, operation, account_id):
         self.api_calls.append((operation, account_id))
         if self.fail_with is not None:
@@ -138,7 +147,8 @@ class FakeHistory:
         return self.START + timedelta(minutes=self._tick)
 
 
-API_OPERATIONS = ("list_history", "get_analysis", "save_report", "list_saved_reports", "get_saved_report")
+API_OPERATIONS = ("list_history", "get_analysis", "save_report", "list_saved_reports", "get_saved_report",
+                  "delete_report")
 
 
 @pytest.fixture(autouse=True)
