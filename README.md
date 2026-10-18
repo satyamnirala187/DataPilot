@@ -317,10 +317,13 @@ integration tests use the database and are skipped when `READONLY_DATABASE_URL` 
 
 - **25** business questions: **21** answerable correctness cases and **4** behaviour-only cases
   (unanswerable questions and prompt-injection or write attempts).
+- **Live, Gemini-only: 24/25 (96%).** The one failure, `prod_profit_electronics`, was a profit
+  query that still counted order items from orders that weren't delivered. It was fixed after the
+  baseline with a general delivered-order filtering rule in the SQL prompt. The case now passes,
+  and targeted revenue, profit and AOV regression checks passed too. The recorded baseline stays
+  24/25.
 - **Offline: 21/21 evaluated answerable cases passed**; the 4 behaviour-only cases are skipped
   offline.
-- **The live NL-to-SQL benchmark is still pending**, because Gemini quota and availability were
-  unstable during development.
 
 Offline mode runs trusted, hand-written SQL against the database. It is a regression and
 consistency check of the expected answers, the validator, the executor and the chart rules, **not a
@@ -366,7 +369,8 @@ debugging.
   answers written by GroqCloud have no insight.
 - Correct SQL for arbitrary, unseen questions is not guaranteed; the generated SQL is shown so it
   can be checked.
-- The live Gemini benchmark has not been completed yet.
+- The live benchmark is 25 questions on one synthetic dataset, put together from several smaller
+  runs because of Gemini quota limits. It is a focused check, not a statistical measure of accuracy.
 - DataPilot is a portfolio and demonstration project, not an enterprise analytics platform.
 
 ## Documentation

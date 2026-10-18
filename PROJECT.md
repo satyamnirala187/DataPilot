@@ -332,8 +332,8 @@ Any of these could be discussed in interviews or reports as **possible future wo
 
 DataPilot v1 is complete when all of the following are true:
 
-- [ ] A user can open the public URL, type a business question and receive the generated SQL, a results table, a suitable chart and a short insight.
-- [ ] A representative set of example business questions (rankings, totals, trends, comparisons) produce correct answers.
+- [x] A user can open the public URL, type a business question and receive the generated SQL, a results table, a suitable chart and a short insight.
+- [x] A representative set of example business questions (rankings, totals, trends, comparisons) produce correct answers.
 - [x] Destructive or unsafe SQL is always rejected, which is shown by validator unit tests covering both allowed and blocked cases.
 - [x] The backend connects to the database as a read-only role, so writes are impossible even if validation fails.
 - [x] No secrets are present in the repository or the frontend bundle.
