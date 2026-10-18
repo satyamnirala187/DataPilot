@@ -4,6 +4,7 @@ import { SAVED_LIST_LIMIT } from '../hooks/useSavedReports.js'
 import { describeHistoryItem, historyKind, kindIcon, parseTimestamp } from '../utils/history.js'
 import { SAVED_REPORTS_UNAVAILABLE, filterSavedReports, formatSavedDate, isSavedReportsUnavailable } from '../utils/savedReports.js'
 import ErrorMessage from './ErrorMessage.jsx'
+import ExportPdfAction from './ExportPdfAction.jsx'
 import RemoveReportAction from './RemoveReportAction.jsx'
 import Icon from './Icon.jsx'
 import { PageBar, PageSkeleton } from './PageLoader.jsx'
@@ -299,6 +300,8 @@ function ReportDetail({ detail, backRef, onBack, onRetry, onRemove }) {
               result={report.analysis}
               actions={
                 <div className="dp-report-actions">
+                  {/* The PDF is made from this stored snapshot only, under the report's title. */}
+                  <ExportPdfAction result={report.analysis} source="saved" title={report.title} savedAt={report.saved_at} />
                   <p className="dp-saved-state">
                     <Icon name="bookmark" size={16} strokeWidth={1.8} />
                     Saved

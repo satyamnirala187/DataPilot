@@ -73,8 +73,10 @@ does not depend on external Gemini quota.
 - **Visible SQL** for every answer, with a Copy SQL button.
 - **History and Saved Reports**: every answered question is recorded and can be reopened from its
   stored result (no new AI call), and saved as a titled report. A saved report can be removed
-  again; its analysis stays in History, which is never deleted. Reports cannot yet be exported or
-  renamed.
+  again; its analysis stays in History, which is never deleted. Reports cannot be renamed yet.
+- **PDF export** of a fresh answer, a History analysis or a saved report: generated in the browser
+  from the analysis on screen (for History and Saved Reports, the stored snapshot), with no AI,
+  backend or database call. PPTX export is not available yet.
 - **Safe, structured errors** with friendly messages and no internal details.
 - **Private demo access**: one shared login, checked by the backend, before any question is answered.
 - **Per-client rate limiting** and a **global daily question cap** to protect the AI quota.

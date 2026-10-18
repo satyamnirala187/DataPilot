@@ -3222,7 +3222,28 @@ tbody tr:last-child td {
 /* The action row under a result: Save Report, or the quiet "Saved" label. */
 .dp-result-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
+  gap: 12px;
+}
+
+.dp-export-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.dp-export-action .dp-button-quiet:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.dp-export-error {
+  font-size: 14px;
+  color: var(--dp-error);
 }
 
 .dp-save-action {

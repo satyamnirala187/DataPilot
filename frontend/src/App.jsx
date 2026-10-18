@@ -3,6 +3,7 @@ import AnalysisProgress from './components/AnalysisProgress.jsx'
 import AppShell from './components/AppShell.jsx'
 import AskHome from './components/AskHome.jsx'
 import ErrorMessage from './components/ErrorMessage.jsx'
+import ExportPdfAction from './components/ExportPdfAction.jsx'
 import HistoryPage from './components/HistoryPage.jsx'
 import QuestionForm from './components/QuestionForm.jsx'
 import QuestionHeader from './components/QuestionHeader.jsx'
@@ -213,15 +214,18 @@ function AnswerPage({ formProps, result, error, onTryQuestion, isSaved, onSaveRe
         <ResultView
           result={result}
           actions={
-            // Only an answer that was recorded (it has an analysis_id) can be saved.
-            result.analysis_id ? (
-              <SaveReportAction
-                analysisId={result.analysis_id}
-                question={result.question}
-                saved={isSaved(result.analysis_id)}
-                onSave={onSaveReport}
-              />
-            ) : null
+            <>
+              <ExportPdfAction result={result} source="query" />
+              {/* Only an answer that was recorded (it has an analysis_id) can be saved. */}
+              {result.analysis_id ? (
+                <SaveReportAction
+                  analysisId={result.analysis_id}
+                  question={result.question}
+                  saved={isSaved(result.analysis_id)}
+                  onSave={onSaveReport}
+                />
+              ) : null}
+            </>
           }
         />
       ) : (

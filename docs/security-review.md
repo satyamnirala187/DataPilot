@@ -64,8 +64,10 @@ could return and checks that the executor is never called.
   `VITE_API_BASE_URL` and `frontend/vercel.json` updated (`docs/deployment.md`).
 
 Not vulnerabilities, but current product limits: saved reports can be removed but not renamed
-(`DELETE /saved-reports/{id}` removes only the report; History is never deleted), and answers
-cannot be exported.
+(`DELETE /saved-reports/{id}` removes only the report; History is never deleted), and PPTX export
+is not available. PDF export (fresh answers, History, Saved Reports) is generated client-side from
+the analysis already on screen or its stored snapshot: it makes no Gemini, GroqCloud, backend or
+database call, embeds its fonts instead of fetching them, and needs no CSP change.
 
 ## Production verification (Phase 17 closure)
 

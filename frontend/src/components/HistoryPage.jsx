@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ApiError, SessionExpiredError, getAnalysis, getHistory } from '../services/api.js'
 import { describeHistoryItem, filterHistory, groupHistory, historyKind, kindIcon, parseTimestamp } from '../utils/history.js'
 import ErrorMessage from './ErrorMessage.jsx'
+import ExportPdfAction from './ExportPdfAction.jsx'
 import Icon from './Icon.jsx'
 import { PageBar, PageSkeleton } from './PageLoader.jsx'
 import ResultView from './ResultView.jsx'
@@ -260,14 +261,18 @@ function AnalysisDetail({ detail, backRef, onBack, onRetry, isSaved, onSaveRepor
           <ResultView
             result={analysis}
             actions={
-              onSaveReport && (
-                <SaveReportAction
-                  analysisId={analysis.id}
-                  question={analysis.question}
-                  saved={Boolean(analysis.saved_report) || isSaved(analysis.id)}
-                  onSave={onSaveReport}
-                />
-              )
+              <>
+                {/* The PDF is made from this stored snapshot only. */}
+                <ExportPdfAction result={analysis} source="history" />
+                {onSaveReport && (
+                  <SaveReportAction
+                    analysisId={analysis.id}
+                    question={analysis.question}
+                    saved={Boolean(analysis.saved_report) || isSaved(analysis.id)}
+                    onSave={onSaveReport}
+                  />
+                )}
+              </>
             }
           />
         ) : (

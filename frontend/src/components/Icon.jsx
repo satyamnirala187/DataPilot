@@ -24,6 +24,7 @@ const PATHS = {
   chevronDown: 'M6 9l6 6 6-6',
   search: 'M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0zM16 16l4.5 4.5',
   arrowLeft: 'M19 12H5M11 6l-6 6 6 6',
+  download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   trend: 'M4 16l5-5 4 4 7-7M15 8h5v5',
   target: 'M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0zM8 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0z',
 }
