@@ -233,8 +233,8 @@ did not get the expected display:
 | `cat_profit_margin_by_category` | bar | table |
 
 The chart is picked by the app's deterministic rules from the columns Gemini returns, so these
-mismatches come from the shape of the generated result, not from wrong values. The cause has not
-been investigated. Batches 1–4 did not record the chart type.
+mismatches come from the shape of the generated result, not from wrong values. Batches 1–4 did not
+record the chart type. Both were fixed after the baseline; see "chart-selection fix" below.
 
 ### After the baseline: delivered-order join fix (2026-10-19)
 
@@ -260,6 +260,44 @@ rule names no category, product or question.
 
 All 4 judged regression checks passed, and no generated query put the status filter inside an
 outer join. `geo_aov_mumbai` is counted neither as a pass nor as a fail.
+
+### After the baseline: chart-selection fix (2026-10-19)
+
+**Causes.** Gemini wrote months as text with `TO_CHAR(..., 'YYYY-MM')`, which the chart rules did
+not recognise as dates, so the result was shown as a bar chart. It also often selected an integer id
+next to the name (`category_id, category_name, ...`). Two numeric columns left no single measure,
+so the result fell back to a table.
+
+**Fix (`e9761e2`, `app/chart_selector.py`).**
+
+- A valid `YYYY-MM` value now counts as a date.
+- On results with 2 or more rows, integer columns named `id` or ending in `_id` are ignored when
+  choosing a bar or line chart. Result tables still show every column.
+- The KPI rule is unchanged.
+
+**Checks (no Gemini, GroqCloud or extra database calls beyond the offline run):**
+
+- **Offline benchmark:** still 21/21, with all 21 chart expectations passing.
+- **Saved live results replayed through the new rules:**
+
+| Case | Expected | Before | After |
+|---|---|---|---|
+| `time_monthly_revenue_last_6_months` | line | bar | line |
+| `cat_profit_margin_by_category` | bar | table | bar |
+| `rank_top_products_by_profit` | bar | table | bar |
+| `cat_revenue_by_category` | bar | table | bar |
+| `prod_profit_electronics` | bar | table | bar |
+| `rank_top_customers_by_spending` | bar | table | table |
+| `time_q2_vs_q3_2026_revenue` | table | bar | bar |
+
+The rows for the first two cases were not saved on 2026-10-15, so their result shapes were rebuilt
+from the saved SQL. The other cases are not product failures:
+
+- `rank_top_customers_by_spending` stays a table on purpose. Gemini returned the name and the email,
+  so two text columns remain and there is no single category to chart.
+- `time_q2_vs_q3_2026_revenue` depends on the result's shape. The reference SQL returns one row with
+  two columns, which is a table. Gemini's equally valid answer, one row per quarter, is a bar chart.
+- The frontend shows `YYYY-MM` line labels as written (`2026-04`) rather than as `Apr 2026`.
 
 ### How live mode works
 
@@ -340,5 +378,4 @@ GROQ_API_KEY= .venv/bin/python -m tests.benchmark.run --live
 - Re-run `geo_aov_mumbai` with the delivered-order join fix once Gemini is available.
 - Re-run on the current code the 8 cases whose latest result is still from 2026-10-15
   (`kpi_total_revenue` and `kpi_total_profit` have since passed with the fix).
-- Look into the two chart-display mismatches.
 - Run the whole benchmark in one pass once provider quota allows.
