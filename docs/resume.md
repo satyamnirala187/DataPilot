@@ -106,7 +106,8 @@ on Vercel, Render and Supabase, with over 700 automated tests."
   integration tests need the database and are skipped without it.
 - **Benchmark:** 25 questions, 21 answerable and 4 behaviour-only. Offline mode runs trusted
   hand-written SQL, so "21/21 offline" is a regression and consistency check, **not** a measure of
-  Gemini's accuracy. The live Gemini benchmark has not been run yet. Do not describe the project as
-  "100% accurate".
+  Gemini's accuracy. The live Gemini-only benchmark passed 24/25 (96%), with 1 correctness failure;
+  it was assembled from several smaller runs (`docs/benchmark.md` §9). Do not describe the project
+  as "100% accurate".
 - **Row cap:** at most 500 rows are returned; the query fetches one extra row only to report
   whether results were truncated.

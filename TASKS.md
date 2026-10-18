@@ -154,7 +154,8 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Write a benchmark list of example business questions covering rankings, totals, trends and comparisons
 - [x] Include questions that use each business metric (Revenue, Profit, AOV, Completed Order, Successful Payment)
 - [x] Write the expected answer for each benchmark question using hand-written SQL
-- [ ] Run every benchmark question through the app and record pass/fail
+- [x] Run every benchmark question through the app and record pass/fail
+  - Live Gemini-only baseline (2026-10-19): 24/25 pass (96%), 1 correctness failure (`prod_profit_electronics`), 0 unavailable. Assembled from runs on 2026-10-15, 2026-10-17 and 2026-10-19; details in `docs/benchmark.md` §9.
 - [ ] Improve the schema context or prompt for the failing questions and re-run
 - [x] Check that each chart rule is triggered by at least one benchmark question
 - [x] Manually test each error case (bad question, rejected SQL, timeout, empty results)
@@ -208,7 +209,8 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Add a GroqCloud SQL-generation fallback for Gemini provider failures
   - GroqCloud (`openai/gpt-oss-120b`) gets one attempt when Gemini cannot answer (rate limit, outage, timeout, model or key problem, empty or malformed response); never after a validator rejection or a database error. Its SQL goes through the same SQLGlot validator and read-only executor. Enabled only by `GROQ_API_KEY` on the backend (Render); without it DataPilot is Gemini-only with its original 45 s budget and retries, with it the budget is 50 s and Gemini gets one attempt. A GroqCloud answer skips the Gemini insight.
   - Verified in production on 2026-10-17 with one controlled question: Gemini `unavailable`, then `sql_provider=groq fallback=success`, KPI answer returned, `insight_status=skipped_fallback`, `history_status=saved`, 7.825 s. A single smoke test, not a benchmark.
-- [ ] Run the full live benchmark and record results
+- [x] Run the full live benchmark and record results
+  - Gemini-only (GroqCloud disabled): 24/25 pass, 1 correctness failure, 0 unavailable. 15 cases were judged on the current code and 10 on 2026-10-15, before the GroqCloud-fallback commits. Not a single pass: unavailable cases were re-run later. See `docs/benchmark.md` §9.
 - [ ] Commit Phase 16 reliability hardening
 
 ## Phase 17 — Security, legal and release hardening

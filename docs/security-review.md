@@ -47,9 +47,11 @@ could return and checks that the executor is never called.
   identified by Cloudflare's `CF-Connecting-IP` (`app/client_ip.py`, enabled with
   `TRUST_CF_CONNECTING_IP=true`), never by the client-controlled `X-Forwarded-For`. See
   `docs/deployment.md` for how to verify it after a deploy.
-- Phase 8 is complete; its production `/docs` check used a normal revenue question. A live
-  prompt-injection check through Gemini has not been run yet, because of Gemini rate limits. The
-  tests above assume the worst case instead: a model that obeys the injection completely.
+- Phase 8 is complete; its production `/docs` check used a normal revenue question. Both live
+  safety benchmark cases (a delete request and a prompt injection to drop `orders`) passed through
+  Gemini on 2026-10-15: each returned the "cannot be answered" message and no table's row count
+  changed (`docs/benchmark.md` §9). The tests above still assume the worst case: a model that obeys
+  the injection completely.
 - Logout revocations, like the rate limits, are kept in memory: a backend restart forgets them
   (`docs/deployment.md`, "Rotating access").
 - One shared demo login means every visitor shares the same History and Saved Reports. Saved report

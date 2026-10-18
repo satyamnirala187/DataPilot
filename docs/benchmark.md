@@ -128,7 +128,15 @@ Offline benchmark, verified on 2026-10-10:
 kpi 4/4, ranking 2/2, customers 2/2, geography 3/3, time_series 3/3, period_comparison 1/1,
 rates 1/1, operations 1/1, payments 1/1, breakdown 3/3.
 
-The live Gemini benchmark has not been run yet (see section 9), so there is no live score.
+Live Gemini-only baseline, completed on 2026-10-19 (details and provenance in section 9):
+
+| | |
+|---|---|
+| Cases | 25 |
+| Passed | 24 |
+| Correctness failures | 1 (`prod_profit_electronics`) |
+| Unavailable | 0 |
+| Accuracy | 96% |
 
 ## 7. What the Offline Result Shows
 
@@ -169,10 +177,66 @@ Further limitations:
 .venv/bin/python -m tests.benchmark.run --live
 ```
 
-**Live benchmark status: NOT YET COMPLETED.** During development the Gemini provider repeatedly
-returned rate-limit (429) and unavailable (503) responses, and the one availability check made for
-the benchmark returned 429. This is a provider quota and availability issue, not an application
-failure. The live natural-language-to-SQL benchmark remains pending.
+### Live baseline (Gemini-only)
+
+**24/25 cases passed (96%): 1 correctness failure, 0 unavailable.**
+
+| | |
+|---|---|
+| Model | Gemini `gemini-3.6-flash` |
+| Provider | Gemini only. GroqCloud did not take part (see below) |
+| Settings | insights off, the app's normal retries; the delay between questions varied by run |
+
+**How the baseline was assembled.** It is not a single pass. The free-tier Gemini quota and
+provider outages meant the questions were run in several smaller runs, and any question that came
+back unavailable was run again later. Each case's result is its latest judged live run:
+
+| Runs | Date | Code | Cases | Result |
+|---|---|---|---|---|
+| Parts 1–2 | 2026-10-15 | as of `9b7aef3`, before the GroqCloud-fallback commits | 10 | 10 pass |
+| Batches 1–4 | 2026-10-17 and 2026-10-19 | `50a9258` (current) | 15 | 14 pass, 1 fail |
+
+- 15 cases were judged on the current code. The other 10 passes are valid live runs from
+  2026-10-15, made before the GroqCloud-fallback commits. Those commits do not change the
+  Gemini-only path (without `GROQ_API_KEY` the app keeps its original 45 s budget and retries), but
+  those 10 cases have not been re-run on the current code.
+- **Every SQL query in the baseline was written by Gemini.** The 2026-10-15 runs predate the
+  GroqCloud code, and batches 1–4 ran with `GROQ_API_KEY=` (fallback disabled) through a wrapper
+  that refuses to start if a key is set. Every judged result records `sql_provider=gemini`.
+- 22 judged results came from Gemini's first attempt, and 3 needed the app's own retry after a
+  transient error.
+- Unavailable results from earlier runs were not counted, and each of those cases was re-run
+  later: on 2026-10-15, seven Gemini "unavailable" errors and one 429 (quota exhausted); in batch 1,
+  one "unavailable"; in batch 3, one 429. The final runs had no 429, 5xx or timeout.
+
+**Correctness failure: `prod_profit_electronics`** ("What is the profit for each product in the
+Electronics category?"). Gemini returned all 12 Electronics products, but the profit values were
+too high (for example Orvexa Bluetooth Speaker ₹598,431.14 instead of ₹560,801.88). It used
+`LEFT JOIN` and put the status filter in the join condition:
+
+```sql
+LEFT JOIN order_items AS oi ON p.product_id = oi.product_id
+LEFT JOIN orders AS o ON oi.order_id = o.order_id AND o.status = 'delivered'
+```
+
+The filter only decides which `orders` rows join. Order items from orders that weren't delivered
+are kept (with a NULL order), so their profit is still added up. No prompt or schema-context change
+has been made for this yet.
+
+**Chart display (not part of the score).** Live mode judges only the returned values. The
+2026-10-15 runs also recorded which chart the app picked, and two cases that passed on correctness
+did not get the expected display:
+
+| Case | Expected | Shown |
+|---|---|---|
+| `time_monthly_revenue_last_6_months` | line | bar |
+| `cat_profit_margin_by_category` | bar | table |
+
+The chart is picked by the app's deterministic rules from the columns Gemini returns, so these
+mismatches come from the shape of the generated result, not from wrong values. The cause has not
+been investigated. Batches 1–4 did not record the chart type.
+
+### How live mode works
 
 Live mode tests the full path for each question:
 
@@ -248,6 +312,8 @@ GROQ_API_KEY= .venv/bin/python -m tests.benchmark.run --live
 
 ## 12. Future Work
 
-- Run the live Gemini benchmark once provider quota is reliable.
-- Investigate any failing cases from that run.
-- Change the prompt or schema context only where a live failure shows it is needed, then re-run.
+- Address the `prod_profit_electronics` failure (status filter inside a `LEFT JOIN` condition)
+  in the prompt or schema context only if needed, then re-run that case.
+- Re-run the 10 cases last judged on 2026-10-15 on the current code.
+- Look into the two chart-display mismatches.
+- Run the whole benchmark in one pass once provider quota allows.
