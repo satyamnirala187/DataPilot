@@ -165,3 +165,39 @@ request's summary log line showed:
 - `insight_status=skipped_fallback`: the Gemini insight was skipped, as designed;
 - `history_status=saved`: the answer was stored once in History;
 - total request time 7.825 s.
+
+## Dependency advisory: `image-size` through PptxGenJS
+
+Added after Phase 17. The Phase 17 dependency audit was made before the export libraries existed
+(Phase 17 closed on 2026-10-15; jsPDF was added on 2026-10-19 and PptxGenJS on 2026-10-20). This
+advisory was not part of that audit, and the Phase 17 record above is unchanged.
+
+**Finding, 2026-10-20.** `npm audit --omit=dev`, run in `frontend/`, reports two high-severity
+findings: `image-size` (affected versions 0.6.3 to 2.0.2; 1.2.1 is installed), which has two
+advisories, and `pptxgenjs` 4.0.1, flagged only because it depends on it:
+
+- GHSA-5p2g-fcmc-qvqq: the JXL and HEIF parsers can loop forever (denial of service).
+- GHSA-w3rx-r6r6-pgpr: the ICNS parser can loop forever (denial of service).
+
+`image-size` is a transitive dependency, reached only through `pptxgenjs`. jsPDF 4.2.1, the other
+export library, had no finding in the same run.
+
+**Why the vulnerable parsers are not reachable in the shipped browser code.**
+
+- PptxGenJS excludes `image-size` from browser builds (`"image-size": false` in its `browser`
+  field), so the production build stubs it out. A search of the built PPTX chunk found no
+  `image-size` code and none of its parser names.
+- The deck embeds one image: the DataPilot logo. It is the application's own SVG, drawn to a PNG in
+  the browser and passed to PptxGenJS as a data URL. No image supplied by a user, or returned by the
+  database or an AI provider, is passed through this dependency.
+
+On that basis the vulnerable parsing path is not reachable in the current shipped implementation.
+This is a statement about the current code, not a claim that the advisory carries no risk: if a
+later change passed user-supplied or remote images to PptxGenJS, or used the dependency outside the
+browser, this note would need to be reviewed again.
+
+**Decision.** The advisories stay recorded here. No dependency was changed to silence `npm audit`:
+the fix it suggests (`npm audit fix --force`) would install `pptxgenjs@4.0.0`, which npm itself marks
+as a breaking change. `pptxgenjs` and `image-size` will be monitored for a normal, compatible
+upstream update; when one is available it will go through the usual tests and builds, and this note
+will be updated.
