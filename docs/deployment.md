@@ -233,13 +233,14 @@ the previous version (with its rate limit and daily cap) returns as a whole. If 
 
 Phase 19 stores every successful answer as History and lets users save one as a report
 (`docs/architecture.md`, "Application data"). This is live in production. Reopening History or a
-saved report reads the stored snapshot, with no Gemini call or SQL rerun; saved reports cannot be
-edited or deleted in V1. The one shared demo login is one account, so all demo visitors share the
+saved report reads the stored snapshot, with no Gemini call or SQL rerun; a saved report can be
+removed but not edited. The one shared demo login is one account, so all demo visitors share the
 same History and Saved Reports. In production this needs one more secret:
 
 **`APP_DATABASE_URL`** is the connection for the role `datapilot_app`. That role can only read and
-add rows in `datapilot.analyses` and `datapilot.saved_reports`: no access to the business tables, no
-updates or deletes. It is never used for generated SQL, which keeps running as
+add rows in `datapilot.analyses` and `datapilot.saved_reports`, and delete rows in
+`datapilot.saved_reports` only (to remove a saved report): no access to the business tables, no
+updates, and no deletes of analyses. It is never used for generated SQL, which keeps running as
 `datapilot_readonly`. `database/create_app_role.py` wrote it to the local `.env`, with the same
 session-pooler host as `READONLY_DATABASE_URL` and `sslmode=require`.
 
@@ -323,8 +324,30 @@ console.log(reports.items.length, (await fetch(`${api}/saved-reports/${reports.i
 ```
 
 A saved report can be removed again (`DELETE /saved-reports/{id}`, 204); its analysis stays in
-History, which is never deleted.
+History, which is never deleted. Removal came after Phase 19 and needs the `DELETE` grant below.
 None of these requests calls Gemini, runs SQL on the business tables or uses the daily cap.
+
+### Report removal needs one more database grant
+
+Removing a saved report runs `DELETE` on `datapilot.saved_reports` as `datapilot_app`. That grant is
+in `database/app_role.sql`, so a database set up before removal existed does not have it until
+`database/create_app_role.py` is run again. Each run rotates the role's password and rewrites
+`APP_DATABASE_URL` in the local `.env`: copy the new value to Render straight away (see "Setting
+`APP_DATABASE_URL`"). Until the grant exists, a removal is refused by the database and the API
+answers 503 `history_unavailable` (logged as `delete_failed`); nothing is removed, and History,
+saving and reopening are unaffected. To check removal in production, save one analysis, remove it
+from Saved Reports and confirm the report is gone, the sidebar count has updated and the analysis is
+still in History (it can then be saved again). This needs no Gemini call. The live app has been
+checked this way (`TASKS.md`, Phase 20). The grant is `DELETE` on `datapilot.saved_reports` only: an
+analysis is never deleted.
+
+### Report export (PDF and PowerPoint)
+
+Export PDF and Export PPTX are frontend-only (`docs/architecture.md`, "Report export"). They need no
+environment variable, no Render change and no change to `frontend/vercel.json`: both files are made
+in the browser from the analysis on screen and make no request. A normal Vercel deploy of `main`
+ships them. Each exporter is a separate JavaScript chunk, fetched when its button is first pressed.
+To roll back, revert the export commits and push; nothing else needs undoing.
 
 ### Rolling back
 

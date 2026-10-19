@@ -3,8 +3,9 @@
 The React + Vite single-page app for DataPilot (UI V2). After the demo login it sends a question to
 the FastAPI `POST /query` endpoint and shows the answer: a KPI or chart with summary figures, the AI
 insight, the result table and the generated SQL. History and Saved Reports reopen stored answers,
-and an answer can be saved as a titled report. It holds no secrets. For the project overview, architecture and full setup, see the
-[root README](../README.md).
+an answer can be saved as a titled report, and a saved report can be removed again. Any answer can be
+exported as a PDF or a PowerPoint file, made in the browser. It holds no secrets. For the project
+overview, architecture and full setup, see the [root README](../README.md).
 
 ## Run locally
 
@@ -33,9 +34,12 @@ src/
   AccessGate.jsx                  session check, login page, signed-in app
   App.jsx                         signed-in views, question and answer state
   services/api.js                 the only code that calls the backend
-  hooks/useSavedReports.js        saved-report count, saved state and saving
-  utils/                          formatting, result summaries, History and report helpers
+  hooks/useSavedReports.js        saved-report count, saved state, saving and removing
+  utils/                          formatting, result summaries, History and report helpers;
+                                  exportFile.js is the logo and download code the exports share
   config/                         fixed Ask-page text and the demo workspace labels
+  pdf/                            PDF export (jsPDF): report content, drawing and embedded fonts
+  pptx/                           PowerPoint export (PptxGenJS): slide plan, drawing and theme
   components/
     AppShell.jsx                  sidebar (icon rail on narrow screens) and top bar
     LoginPage.jsx, BootLoader.jsx login page and session-check loader
@@ -48,5 +52,8 @@ src/
     HistoryPage.jsx               History list, search and reopened analyses
     SavedReportsPage.jsx          Saved Reports list, search and reopened reports
     SaveReportAction.jsx, SaveReportDialog.jsx  Save Report and its title dialog
+    RemoveReportAction.jsx        Remove from Saved Reports, with an inline confirmation
+    ExportPdfAction.jsx, ExportPptxAction.jsx  Export PDF and Export PPTX; each loads its
+                                  exporter only on the first press
     PageLoader.jsx, Icon.jsx, Logo.jsx
 ```

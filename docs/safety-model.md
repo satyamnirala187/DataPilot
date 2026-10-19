@@ -167,8 +167,7 @@ only the six tables in `public`; `datapilot_readonly` has no access to schema `d
 and the prompt never mentions them. `PUBLIC`, `anon` and `authenticated` have no access either.
 Tests cover each layer (`tests/test_sql_validator.py`, `tests/test_app_schema.py`, and live catalog
 checks against the hosted database in `tests/test_database_privileges.py`).
-The History and Saved Reports API (live in production; report removal is newer and not yet
-verified there) only reads these snapshots, adds reports and removes them: every endpoint requires a demo session, every query is scoped to the session's account
+The History and Saved Reports API (live in production, including report removal) only reads these snapshots, adds reports and removes them: every endpoint requires a demo session, every query is scoped to the session's account
 (a report through its analysis), the request body for saving accepts only an analysis id and a
 title, and nothing it does calls Gemini or runs SQL against the business tables.
 Saved reports can be removed but not edited. Removing one deletes only the report row, never its

@@ -193,8 +193,8 @@ Middleware runs in this order for each request, outermost first: `SecurityHeader
 `RequestContext` → `CatchUnexpectedErrors` → `LimitRequestBody` → the route.
 
 Setup scripts live in `database/` (`schema.sql`, `seed.py`, `readonly_role.sql`,
-`create_readonly_role.py`, `apply_schema.py`, `api_roles.sql`, `revoke_api_roles.py`, and for the
-planned History and Saved Reports `app_schema.sql`, `app_role.sql`, `create_app_role.py`). They use
+`create_readonly_role.py`, `apply_schema.py`, `api_roles.sql`, `revoke_api_roles.py`, and for
+History and Saved Reports `app_schema.sql`, `app_role.sql`, `create_app_role.py`). They use
 the admin connection and are never part of the running API.
 
 ## 5. Frontend Structure
@@ -203,18 +203,51 @@ The frontend (`frontend/src/`) is a single page with plain React state; no route
 
 | File | Responsibility |
 |---|---|
-| `App.jsx` | Page layout and request state (question, loading, result, error); prevents double submits; shows the empty state, loading skeleton, error panel or answer |
-| `services/api.js` | The only module that calls the backend: `postQuery`, the timeout, and mapping HTTP errors to friendly titles and messages |
-| `components/QuestionForm.jsx` | The question workspace: textarea (Enter submits, Shift+Enter adds a line), Analyze button, example questions |
-| `components/InsightCard.jsx` | The AI insight, or the quiet unavailable note |
-| `components/Visualization.jsx` | Draws exactly what the backend chose; it never picks a chart or columns itself |
-| `components/KpiCard.jsx` | One value with a readable label, for example "Total Revenue ₹21,304,631.99" |
-| `components/BarChartView.jsx`, `LineChartView.jsx` | Recharts charts (horizontal bars; a line in date order) |
-| `components/ChartCard.jsx`, `ChartTooltip.jsx` | Shared chart frame and tooltip |
-| `components/ResultsTable.jsx` | Row count, truncation note and the raw result table |
+| `AccessGate.jsx` | Checks the demo session, shows the login page, then the signed-in app |
+| `App.jsx` | The signed-in views (Ask, History, Saved Reports) and the question and answer state; prevents double submits |
+| `services/api.js` | The only module that calls the backend: login and session, `postQuery`, the History and Saved Reports calls (including `deleteSavedReport`), the timeout, and mapping HTTP errors to friendly messages |
+| `hooks/useSavedReports.js` | The saved-report count, which analyses are saved, saving and removing |
+| `components/AppShell.jsx` | The sidebar (an icon rail on narrow screens) and the top bar |
+| `components/LoginPage.jsx`, `BootLoader.jsx` | The login page and the session-check loader |
+| `components/AskHome.jsx`, `QuestionForm.jsx`, `AnalysisProgress.jsx` | The Ask page, the question box and example questions, and the progress shown while a question is answered |
+| `components/ResultView.jsx` | One answer: header, summary tiles, the chart, the insight, the data and the SQL |
+| `components/HeroChart.jsx` | Draws exactly what the backend chose (KPI, bar or line, with Recharts); it never picks a chart or columns itself |
+| `components/InsightCard.jsx`, `ResultsTable.jsx`, `QuestionHeader.jsx` | The AI insight (or the quiet unavailable note), the raw result table with its row count and truncation note, and the question heading |
 | `components/SqlViewer.jsx` | The generated SQL with a Copy SQL button |
-| `components/ErrorMessage.jsx` | Error panel: amber for temporary problems, red otherwise |
-| `utils/format.js` | All display formatting: ₹ for money-like columns, % for percentage columns, labels, dates |
+| `components/ErrorMessage.jsx` | The safe error card |
+| `components/HistoryPage.jsx`, `SavedReportsPage.jsx` | The History and Saved Reports lists, search, and reopened analyses and reports |
+| `components/SaveReportAction.jsx`, `SaveReportDialog.jsx`, `RemoveReportAction.jsx` | Saving an analysis under a title, and removing a saved report after an inline confirmation |
+| `components/ExportPdfAction.jsx`, `ExportPptxAction.jsx` | The Export PDF and Export PPTX buttons (see "Report export" below) |
+| `pdf/`, `pptx/`, `utils/exportFile.js` | The PDF and PowerPoint exports |
+| `utils/format.js`, `result.js`, `history.js`, `savedReports.js`, `reportTitle.js` | Display formatting (₹ for money-like columns, % for percentage columns, labels, dates), result summaries, and the History, report and title helpers |
+| `config/` | The fixed Ask-page text and the demo workspace labels |
+
+### Report export (PDF and PowerPoint)
+
+Export PDF and Export PPTX appear under a result in three places: a fresh answer, a reopened History
+analysis and a reopened saved report. Both files are made **in the browser** from the analysis
+already on screen (for History and Saved Reports, the stored snapshot). Nothing is sent to the
+backend, Gemini, GroqCloud or the database, and nothing is recalculated.
+
+- **Shared content.** `pdf/reportContent.js` (`buildReportContent`) turns the analysis into the
+  report both files show, so the PDF and the deck carry the same values. `utils/exportFile.js` draws
+  the logo to a PNG and saves the file through a temporary `blob:` link. The file is named
+  `datapilot-<a few words of the title>-<YYYY-MM-DD>.pdf` or `.pptx`.
+- **PDF** (`pdf/`, jsPDF). An A4 report drawn from text and vector shapes, not a screenshot of the
+  page. It embeds subsets of Noto Sans fonts so that ₹ prints correctly.
+- **PowerPoint** (`pptx/`, PptxGenJS). `buildSlides.js` plans the slides without drawing anything:
+  a Summary slide (the question and the summary figures), a Chart slide for bar and line results,
+  an Insight slide only when the insight is too long to sit beside the summary (results with no
+  chart) or beside the chart, as many Data slides as the rows need, and a Generated SQL slide.
+  `renderDeck.js`
+  draws the plan as native PowerPoint content: text, a real table and real charts that stay
+  editable (right-click, Edit Data). Every slide carries the DataPilot header, a footer and "n of
+  N". No sidebar, buttons or other app chrome can appear.
+- **Loaded on demand.** Each exporter is its own chunk, fetched only the first time its button is
+  pressed, so neither library weighs on the first page load.
+- **No Content-Security-Policy change.** The code needs no `eval` or `Function`, the logo is the
+  same-origin SVG, and the download is a `blob:` link. `frontend/vercel.json` is unchanged, and the
+  backend and Render are untouched by either export.
 
 ## 6. Database
 
@@ -251,8 +284,9 @@ session read-only by default with a 5-second statement timeout.
 | `datapilot.saved_reports` | an analysis the user chose to keep: a title and a reference to the analysis (at most one report per analysis), never a copy of it |
 
 It is written by a second role, `datapilot_app` (`database/app_role.sql`), with its own connection
-string, `APP_DATABASE_URL`: `SELECT` and `INSERT` on those two tables only, no `UPDATE` or `DELETE`,
-and no access to the business tables. `datapilot_readonly`, which runs the generated SQL, has no
+string, `APP_DATABASE_URL`: `SELECT` and `INSERT` on those two tables, `DELETE` on
+`datapilot.saved_reports` only (to remove a saved report), no `UPDATE`, and no access to the
+business tables. `datapilot_readonly`, which runs the generated SQL, has no
 access to schema `datapilot`. `schema.sql` never touches it, so reseeding the business data keeps
 every analysis and saved report. The schema and role exist in the hosted database and are verified
 by live tests.
@@ -296,9 +330,11 @@ edited, and History is never deleted: `datapilot_app` has `SELECT` and `INSERT` 
 
 **Production status:** live since Phase 19, with `APP_DATABASE_URL` set on Render; production
 storage and every Phase 19 endpoint were verified after the rollout. Report removal
-(`DELETE /saved-reports/{id}`) came later and has not been verified in production yet. The one shared demo login is one account,
-so every demo visitor sees the same History and Saved Reports. There is no History or Saved Reports
-screen yet: the current frontend ignores `analysis_id` until UI V2.
+(`DELETE /saved-reports/{id}`) came later and was checked in the live app too: the report is
+removed from Saved Reports and the count updates, while its analysis stays in History and can be
+saved again. The one shared demo login is one account,
+so every demo visitor sees the same History and Saved Reports. The frontend (UI V2) has a History
+screen and a Saved Reports screen that read these endpoints.
 
 ## 7. Business Semantics
 

@@ -96,11 +96,12 @@ LLMs can now translate natural language into SQL fairly reliably, but letting an
 | API framework | FastAPI | Fast, modern, typed (Pydantic), automatic OpenAPI docs |
 | Database | PostgreSQL | Industry-standard relational database |
 | Database hosting | Supabase (managed PostgreSQL) | Free tier, hosted Postgres with no infrastructure to manage |
-| LLM | Gemini API | Turns natural language into SQL and generates insights |
+| LLM | Gemini API, with one GroqCloud fallback for SQL | Gemini turns natural language into SQL and writes insights; GroqCloud writes the SQL only when Gemini cannot |
 | SQL validation | SQLGlot | Parses SQL into a syntax tree so safety checks are structural, not string matching |
 | Synthetic data | Faker | Generates realistic customers, products and orders |
 | Frontend | React + Vite | Standard modern frontend stack with fast dev builds |
 | Charts | Recharts | Simple, declarative React charting |
+| Report export | jsPDF, PptxGenJS | PDF and PowerPoint files made in the browser, with no extra service |
 | Frontend hosting | Vercel | Simple deployment for Vite/React apps |
 | Backend hosting | Render | Simple deployment for Python web services |
 | Version control | Git + GitHub | Source control and public portfolio visibility |
@@ -239,11 +240,22 @@ The chart type is chosen by fixed rules in application code based on the shape o
 | A date/time column + a numeric column | Line chart |
 | Anything else | Table only |
 
+### Added after the original v1 scope
+
+These were not in the first scope. They were built after the must-haves, and each is covered in
+`TASKS.md` and `docs/`.
+
+- [x] Private demo access: one shared login, checked by the backend, to protect the AI quota
+- [x] GroqCloud fallback: one attempt to write the SQL when Gemini cannot; its SQL passes the same validator and read-only role
+- [x] History and Saved Reports: every answered question is stored as a snapshot and can be reopened without a new AI call; a saved report can be removed again
+- [x] PDF and PowerPoint export of an answer, a History analysis or a saved report, made in the browser
+
 ### Nice to have (only after the must-haves work)
 
-- [ ] Session-level query history in the UI
+- [x] Session-level query history in the UI (delivered as History, which also survives logout)
 - [ ] Schema browser panel showing the tables and columns
-- [ ] Copy SQL / export results as CSV
+- [x] Copy SQL
+- [ ] Export results as CSV
 - [ ] Manual chart-type toggle
 - [ ] Light/dark theme
 
@@ -291,9 +303,9 @@ These items are **out of scope for version 1**. Leaving them out is deliberate: 
 | LangChain or similar agent frameworks | Direct API calls are simpler, more transparent and easier to explain |
 | Multi-agent systems | One clear pipeline is enough |
 | AWS / GCP / Azure infrastructure | Supabase + Render + Vercel cover all hosting needs |
-| Write operations of any kind | DataPilot is strictly an analysis tool |
+| Write operations on the business data | DataPilot is strictly an analysis tool: generated SQL is read-only, and the business tables are read through a `SELECT`-only role. Its own History and Saved Reports are kept apart, in schema `datapilot` |
 | Multiple databases or user-uploaded databases | Version 1 targets one known e-commerce schema |
-| User accounts / authentication | Not needed for a public demo on synthetic data |
+| Per-user accounts | One shared private demo login protects the AI quota; there are no individual accounts |
 | Real customer or personal data | All data is synthetic |
 | Fine-tuning or training models | Prompting a hosted model is sufficient |
 | Conversational follow-ups / chat memory | Each question is answered on its own in v1 |

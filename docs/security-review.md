@@ -58,16 +58,19 @@ could return and checks that the executor is never called.
   titles typed by one visitor are shown to others, always as plain text.
 - The frontend loads its fonts from Google Fonts; if that service is unavailable the interface
   falls back to system fonts.
-- The production JavaScript bundle is about 658 kB (194 kB gzipped), above Vite's 500 kB warning.
-  This affects load time, not security.
+- The production JavaScript bundle is about 665 kB (196 kB gzipped), above Vite's 500 kB warning.
+  This affects load time, not security. The PDF (about 516 kB) and PowerPoint (about 379 kB)
+  exporters are separate chunks, fetched only when their button is first pressed.
 - The CSP's `connect-src` names the Render API origin, so a new backend URL needs both
   `VITE_API_BASE_URL` and `frontend/vercel.json` updated (`docs/deployment.md`).
 
 Not vulnerabilities, but current product limits: saved reports can be removed but not renamed
-(`DELETE /saved-reports/{id}` removes only the report; History is never deleted), and PPTX export
-is not available. PDF export (fresh answers, History, Saved Reports) is generated client-side from
-the analysis already on screen or its stored snapshot: it makes no Gemini, GroqCloud, backend or
-database call, embeds its fonts instead of fetching them, and needs no CSP change.
+(`DELETE /saved-reports/{id}` removes only the report; History is never deleted). PDF and PPTX
+export (fresh answers, History, Saved Reports) are generated client-side from the analysis already
+on screen or its stored snapshot: they make no Gemini, GroqCloud, backend or database call, and
+need no CSP change. The PDF embeds its fonts instead of fetching them. The PPTX code needs no
+`eval` or `Function` constructor (`script-src 'self'` stays as it is), embeds only the logo (as a
+data URL) and is covered by tests that fail if it calls `fetch` or `XMLHttpRequest`.
 
 **PDF export production check, 2026-10-19.** The project owner exported a stored production
 analysis (12 result rows, bar chart) as a PDF from the live site. The real PDF downloaded, with:
@@ -76,6 +79,27 @@ analysis (12 result rows, bar chart) as a PDF from the live site. The real PDF d
 - the bar chart correct, and all 12 result rows present across 2 pages;
 - the AI insight and the generated SQL present, and page numbers correct;
 - no application chrome (buttons, navigation or sidebar) in the PDF.
+
+**PPTX export production check, 2026-10-20.** The project owner exported a stored production
+History analysis (12 result rows, bar chart) as a PowerPoint file from the live site. Vercel's
+Production deployment for commit `bc823e8` had completed, and the live PPTX chunk matched a local
+build of that commit. The real `.pptx` downloaded, and opened and rendered cleanly with no blocking
+layout issue, with:
+
+- DataPilot branding, and the question and timestamps correct;
+- the summary cards and ₹ formatting correct;
+- a native, editable bar chart;
+- the AI insight, all 12 result rows and the generated SQL present;
+- slide numbers correct;
+- no application chrome (buttons, navigation or sidebar) in the deck.
+
+No backend (Render) deployment was involved: the export is client-side only.
+
+Accepted v1 limitations of the PowerPoint export, not security issues: the labels of native charts
+may use Western digit grouping (1,234,567) while the deck's text and tables use Indian grouping
+(12,34,567), and Keynote may fail to import a native line chart that has a gap (a missing value).
+The file itself is correct and renders in PowerPoint and other Office-compatible viewers. Charts
+stay native and editable; they are not replaced by pictures.
 
 ## Production verification (Phase 17 closure)
 

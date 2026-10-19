@@ -74,9 +74,10 @@ does not depend on external Gemini quota.
 - **History and Saved Reports**: every answered question is recorded and can be reopened from its
   stored result (no new AI call), and saved as a titled report. A saved report can be removed
   again; its analysis stays in History, which is never deleted. Reports cannot be renamed yet.
-- **PDF export** of a fresh answer, a History analysis or a saved report: generated in the browser
-  from the analysis on screen (for History and Saved Reports, the stored snapshot), with no AI,
-  backend or database call. PPTX export is not available yet.
+- **PDF and PowerPoint export** of a fresh answer, a History analysis or a saved report: generated
+  in the browser from the analysis on screen (for History and Saved Reports, the stored snapshot),
+  with no AI, backend or database call. The PowerPoint deck uses native, editable charts. Both
+  exports are deployed and were checked in production (PDF on 2026-10-19, PPTX on 2026-10-20).
 - **Safe, structured errors** with friendly messages and no internal details.
 - **Private demo access**: one shared login, checked by the backend, before any question is answered.
 - **Per-client rate limiting** and a **global daily question cap** to protect the AI quota.
@@ -313,8 +314,9 @@ npm run lint
 npm run build
 ```
 
-Current results: **656 backend tests passed** and **66 frontend tests passed**. A few backend
-integration tests use the database and are skipped when `READONLY_DATABASE_URL` is not set.
+Current results (2026-10-20): **1,521 backend tests passed** and **584 frontend tests passed**.
+The 40 backend integration tests that use the database are skipped when `READONLY_DATABASE_URL` or
+`APP_DATABASE_URL` is not set, as in this run.
 
 ## Benchmark
 
@@ -374,6 +376,10 @@ debugging.
   can be checked.
 - The live benchmark is 25 questions on one synthetic dataset, put together from several smaller
   runs because of Gemini quota limits. It is a focused check, not a statistical measure of accuracy.
+- In an exported PowerPoint deck, the labels of the native charts use Western digit grouping
+  (1,234,567), while the deck's text and tables use Indian grouping (12,34,567). Keynote may not
+  import a native line chart that has a gap (a missing value); PowerPoint and other Office-compatible
+  viewers show it correctly.
 - DataPilot is a portfolio and demonstration project, not an enterprise analytics platform.
 
 ## Documentation
@@ -386,9 +392,14 @@ debugging.
 
 ## Project Status
 
-- **Core product:** complete and deployed.
-- **Documentation:** being finalised. README screenshots, a demo recording, a resume summary and a
-  final project review are still to come.
+- **Core product:** complete and deployed, including private demo access, History and Saved
+  Reports (with report removal, checked in the live app), the GroqCloud SQL fallback, and PDF and
+  PowerPoint export.
+- **Documentation:** the architecture, safety, security, benchmark and deployment documents and a
+  resume summary are written. The README's demo GIF and three screenshots date from 2026-10-10,
+  before UI V2 (2026-10-15); updated screenshots and a new demo recording have not been made.
+- **Not built (optional, after v1):** CSV export, a schema browser, a manual chart-type toggle and
+  a light/dark theme. See `TASKS.md`.
 
 ## Author
 

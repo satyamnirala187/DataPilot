@@ -254,18 +254,42 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 - [x] Automatic query history recording
   - Every successful `/query` answer is snapshotted to `datapilot.analyses` (account `demo`) and returned with its `analysis_id`. History failures are non-fatal: the full answer is still returned with `analysis_id: null`.
 - [x] History and Saved Reports API
-  - Five authenticated, account-scoped endpoints: `GET /history`, `GET /history/{id}`, `POST /saved-reports`, `GET /saved-reports`, `GET /saved-reports/{id}`. Reads use the stored snapshots only (no Gemini, no SQL rerun); a Saved Report saves an existing analysis by `analysis_id` with a title. No delete or edit endpoint in V1.
+  - Five authenticated, account-scoped endpoints: `GET /history`, `GET /history/{id}`, `POST /saved-reports`, `GET /saved-reports`, `GET /saved-reports/{id}`. Reads use the stored snapshots only (no Gemini, no SQL rerun); a Saved Report saves an existing analysis by `analysis_id` with a title. No edit endpoint; report removal was added later (Phase 20).
 - [x] Production deployment and verification
   - `APP_DATABASE_URL` configured on Render as a secret (the writer credential was rotated before production verification) and the Phase 19 backend deployed successfully. Gemini-free checks: `/health` 200, unauthenticated `/history` and `/saved-reports` 401, `/docs` and `/openapi.json` 404. One controlled query ("What is our total revenue?", ₹21,304,631.99) created exactly one History snapshot holding that value. Verified in production: History list and detail; Saved Reports create (201), list and detail; duplicate save refused (409); the history entry then showed its `saved_report_id`. No benchmark or repeated Gemini production testing was performed.
 
+## Phase 20 — Saved report removal and report export
+
+- [x] Saved report removal
+  - `DELETE /saved-reports/{id}` (204) removes only the saved report; its analysis stays in History, which is never deleted. `datapilot_app` has `DELETE` on `datapilot.saved_reports` only (`database/app_role.sql`). The Saved Reports view has a "Remove from Saved Reports" action with an inline confirmation (`6fc4467`).
+- [x] Production verification of saved report removal
+  - Checked manually in the live app, with no AI query: removing a saved report succeeds, the report disappears from Saved Reports, the sidebar count updates, the underlying analysis stays in History, and the same History analysis can be saved again later.
+- [x] PDF report export
+  - Made in the browser (jsPDF) from the analysis on screen or its stored snapshot: no AI, backend or database call, and no CSP change (`4a38f9e`). Deployed and verified in production on 2026-10-19 from a stored analysis (12 rows, bar chart); see `docs/security-review.md`.
+- [x] PowerPoint (PPTX) report export
+  - Made in the browser (PptxGenJS, loaded only when Export PPTX is pressed) from the same analysis, with native, editable PowerPoint charts: no AI, backend or database call, no `eval`, and no CSP change (`bc823e8`). Deployed on Vercel (a Production deployment of `bc823e8`; the live chunk matches the local build) and verified in production on 2026-10-20 from a stored History analysis (12 rows, bar chart); see `docs/security-review.md`. No backend (Render) change was needed.
+  - Accepted v1 limitations: native chart labels use Western digit grouping while the deck's text and tables use Indian grouping, and Keynote may not import a native line chart that has a gap. PowerPoint and other Office-compatible viewers render it correctly. Native charts are not replaced by pictures.
+- [x] Commit Phase 20 (`6fc4467`, `4a38f9e`, `b907986`, `bc823e8`)
+
 ---
 
-## Nice to have (only after all phases above are complete)
+## Before calling v1 released
 
-From PROJECT.md §8. Do not start these until v1 is finished.
+- [ ] The owner can explain the architecture, safety model and design decisions without notes (Phase 15; PROJECT.md §12). This needs no code.
 
-- [ ] Session-level query history in the UI
+No release or tag has been made yet.
+
+---
+
+## Nice to have / after v1
+
+From PROJECT.md §8. Optional: none of these is needed for the v1 release, and none should be started before it.
+
+- [x] Session-level query history in the UI (delivered as History in Phase 19, which also survives logout)
 - [ ] Schema browser panel showing the tables and columns
-- [ ] Copy SQL / export results as CSV
+- [x] Copy SQL (the Copy SQL button on every SQL viewer)
+- [ ] Export results as CSV (PDF and PPTX report export exist; CSV does not)
 - [ ] Manual chart-type toggle
 - [ ] Light/dark theme
+
+Other follow-ups that are not required for v1: re-run the 8 benchmark cases whose latest live result is from 2026-10-15 on the current code, re-run `geo_aov_mumbai`, and run the whole benchmark in one pass when provider quota allows (`docs/benchmark.md` §12).
