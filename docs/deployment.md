@@ -74,7 +74,8 @@ cannot answer (`docs/architecture.md`, "SQL-generation fallback"). Its SQL goes 
 validator and read-only role.
 
 - **Enable:** add `GROQ_API_KEY` as a secret environment variable on the Render backend service.
-  `GROQ_MODEL` is optional.
+  The Blueprint declares the key with `sync: false`, so it has no value in Git. `GROQ_MODEL` is
+  optional.
 - **Disable:** delete `GROQ_API_KEY` on Render (or leave it empty). The service restarts
   Gemini-only. There is no separate on/off flag, and no code change is needed either way.
 - **Backend only.** Never add it to Vercel, never as a `VITE_GROQ_*` variable, never in frontend

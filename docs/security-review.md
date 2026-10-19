@@ -69,6 +69,14 @@ is not available. PDF export (fresh answers, History, Saved Reports) is generate
 the analysis already on screen or its stored snapshot: it makes no Gemini, GroqCloud, backend or
 database call, embeds its fonts instead of fetching them, and needs no CSP change.
 
+**PDF export production check, 2026-10-19.** The project owner exported a stored production
+analysis (12 result rows, bar chart) as a PDF from the live site. The real PDF downloaded, with:
+
+- DataPilot branding, the summary/KPI content and ₹ formatting correct;
+- the bar chart correct, and all 12 result rows present across 2 pages;
+- the AI insight and the generated SQL present, and page numbers correct;
+- no application chrome (buttons, navigation or sidebar) in the PDF.
+
 ## Production verification (Phase 17 closure)
 
 Checked on 2026-10-15, after UI V2 was merged to `main` and deployed:
