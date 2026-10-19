@@ -4,6 +4,7 @@ import AppShell from './components/AppShell.jsx'
 import AskHome from './components/AskHome.jsx'
 import ErrorMessage from './components/ErrorMessage.jsx'
 import ExportPdfAction from './components/ExportPdfAction.jsx'
+import ExportPptxAction from './components/ExportPptxAction.jsx'
 import HistoryPage from './components/HistoryPage.jsx'
 import QuestionForm from './components/QuestionForm.jsx'
 import QuestionHeader from './components/QuestionHeader.jsx'
@@ -216,6 +217,7 @@ function AnswerPage({ formProps, result, error, onTryQuestion, isSaved, onSaveRe
           actions={
             <>
               <ExportPdfAction result={result} source="query" />
+              <ExportPptxAction result={result} source="query" />
               {/* Only an answer that was recorded (it has an analysis_id) can be saved. */}
               {result.analysis_id ? (
                 <SaveReportAction

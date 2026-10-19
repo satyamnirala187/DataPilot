@@ -4,6 +4,7 @@
 // read: nothing is requested, rerun or recalculated from the database.
 
 import { parseTimestamp } from '../utils/history.js'
+import { valueKind } from '../utils/format.js'
 import { describeColumns, describeResult, formatExactValue, formatSummaryValue } from '../utils/result.js'
 
 // Bars beyond this would not fit one readable chart; every row is still in the table.
@@ -70,7 +71,7 @@ function chartContent(view) {
       highlight: index === view.topIndex,
     }))
     const note = view.points.length > MAX_PDF_BARS ? `Showing the first ${MAX_PDF_BARS} of ${view.points.length} rows; every row is in the Data table.` : null
-    return { kind: 'bar', title: view.title, bars, note }
+    return { kind: 'bar', title: view.title, valueFormat: valueKind(view.yKey), bars, note }
   }
   if (view.kind === 'line') {
     const values = view.points.map((point) => point.y).filter((value) => value !== null)
@@ -78,6 +79,7 @@ function chartContent(view) {
     return {
       kind: 'line',
       title: view.title,
+      valueFormat: valueKind(view.yKey),
       range: view.range,
       points: view.points.map((point) => ({ label: view.formatX(point.x), value: point.y })),
       ticks,
@@ -110,8 +112,9 @@ const FILENAME_STOP_WORDS = new Set([
 /**
  * datapilot-<a few words of the title>-<YYYY-MM-DD>.pdf, using the local date the PDF was made:
  * "Electronics profit" -> datapilot-electronics-profit-2026-10-19.pdf. Only a-z, 0-9 and dashes.
+ * extension is 'pdf' (the default) or 'pptx'.
  */
-export function reportFilename(title, date = new Date()) {
+export function reportFilename(title, date = new Date(), extension = 'pdf') {
   const words = String(title ?? '')
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '') // accents: "Café" -> "cafe"
@@ -124,7 +127,7 @@ export function reportFilename(title, date = new Date()) {
     if (slug.length + word.length + 1 > 60) break
     slug = slug ? `${slug}-${word}` : word
   }
-  return `datapilot-${slug || 'analysis'}-${localDate(date)}.pdf`
+  return `datapilot-${slug || 'analysis'}-${localDate(date)}.${extension === 'pptx' ? 'pptx' : 'pdf'}`
 }
 
 function localDate(date) {

@@ -3,6 +3,7 @@ import { ApiError, SessionExpiredError, getAnalysis, getHistory } from '../servi
 import { describeHistoryItem, filterHistory, groupHistory, historyKind, kindIcon, parseTimestamp } from '../utils/history.js'
 import ErrorMessage from './ErrorMessage.jsx'
 import ExportPdfAction from './ExportPdfAction.jsx'
+import ExportPptxAction from './ExportPptxAction.jsx'
 import Icon from './Icon.jsx'
 import { PageBar, PageSkeleton } from './PageLoader.jsx'
 import ResultView from './ResultView.jsx'
@@ -262,8 +263,9 @@ function AnalysisDetail({ detail, backRef, onBack, onRetry, isSaved, onSaveRepor
             result={analysis}
             actions={
               <>
-                {/* The PDF is made from this stored snapshot only. */}
+                {/* The PDF and PPTX are made from this stored snapshot only. */}
                 <ExportPdfAction result={analysis} source="history" />
+                <ExportPptxAction result={analysis} source="history" />
                 {onSaveReport && (
                   <SaveReportAction
                     analysisId={analysis.id}
