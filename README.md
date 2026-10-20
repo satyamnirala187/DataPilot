@@ -10,6 +10,10 @@ AI insight. It is built around a fictional e-commerce store with synthetic data.
 **Live app:** [data-pilot-flax.vercel.app](https://data-pilot-flax.vercel.app). The hosted demo is
 access-controlled to protect limited third-party API quota; demo credentials are shared privately.
 
+![DataPilot demo: the History page, a stored Electronics profit analysis with chart, insight, generated SQL and export buttons, then Saved Reports](docs/images/datapilot-demo.gif)
+
+*Production UI V2 demo using a stored History analysis: reopening the result does not rerun AI or SQL.*
+
 > DataPilot uses the Gemini API to write SQL, with GroqCloud as a fallback when Gemini is
 > rate-limited or unavailable. If both providers are unavailable, questions can be temporarily
 > unavailable; the app shows a clear message asking you to try again. This is a limit of the
@@ -34,31 +38,50 @@ Example questions (all from the benchmark suite):
 - What is the profit margin for each category?
 - How many customers have never placed an order?
 
-## Demo
-
-![DataPilot demo: asking for the top 5 product categories by revenue](docs/images/datapilot-demo.gif)
-
-The demo uses the real DataPilot frontend with deterministic responses from the verified project
-dataset, so playback does not depend on Gemini quota.
-
 ## Screenshots
 
-### Ask a business question
+Captured from the production deployment using existing stored analyses.
 
-![DataPilot question workspace with example questions](docs/images/datapilot-home.png)
+### Login
 
-### Analyze business results
+![DataPilot login screen with the "Ask Your Data, Understand Your Business" headline and an empty sign-in form](docs/images/datapilot-login.png)
 
-![DataPilot answer showing an AI insight, a Total Revenue KPI, the result table and the generated SQL](docs/images/datapilot-kpi.png)
+*Private demo login for protecting the hosted AI quota.*
 
-### Automatic visualization
+### Analysis Result
 
-![DataPilot bar chart of revenue by product category with the result table](docs/images/datapilot-bar-chart.png)
+![DataPilot analysis of profit for each Electronics product: question, headline, four summary cards, a 12-bar chart, an AI insight and the result table](docs/images/datapilot-result-chart.png)
 
-The first screenshot is from the live deployment. The result screenshots use the real DataPilot
-frontend with deterministic responses: the SQL ran against the project's real dataset through the
-app's validator and read-only executor, and only the Gemini step was replaced, so the documentation
-does not depend on external Gemini quota.
+*Stored Electronics profit analysis with deterministic summary metrics, visualization and business insight.*
+
+### Generated SQL & Export
+
+![DataPilot generated SQL section with a Copy SQL button, followed by the Export PDF, Export PPTX and Saved controls](docs/images/datapilot-result-sql-export.png)
+
+*Generated SQL remains visible and copyable; stored analyses can be exported as PDF or PowerPoint without rerunning the analysis.*
+
+### History & Saved Reports
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/datapilot-history.png" alt="DataPilot History page listing stored analyses grouped by day, with a Saved indicator and a search box" width="100%">
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/datapilot-saved-reports.png" alt="DataPilot Saved Reports page listing a saved report with its question and saved date, and the sidebar count badge" width="100%">
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <b>History</b><br>
+      Successful analyses are stored as snapshots and can be reopened without a new AI request.
+    </td>
+    <td width="50%" valign="top">
+      <b>Saved Reports</b><br>
+      Important analyses can be saved under report titles and reopened later.
+    </td>
+  </tr>
+</table>
 
 ## Key Features
 
@@ -396,8 +419,8 @@ debugging.
   Reports (with report removal, checked in the live app), the GroqCloud SQL fallback, and PDF and
   PowerPoint export.
 - **Documentation:** the architecture, safety, security, benchmark and deployment documents and a
-  resume summary are written. The README's demo GIF and three screenshots date from 2026-10-10,
-  before UI V2 (2026-10-15); updated screenshots and a new demo recording have not been made.
+  resume summary are written. The README demo GIF and screenshots were refreshed for UI V2 from the
+  production app, using existing stored History and Saved Reports data rather than a new AI query.
 - **Not built (optional, after v1):** CSV export, a schema browser, a manual chart-type toggle and
   a light/dark theme. See `TASKS.md`.
 
