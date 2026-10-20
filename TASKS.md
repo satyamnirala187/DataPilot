@@ -273,17 +273,19 @@ This is the step-by-step build plan for DataPilot v1. It is based strictly on [P
 
 ---
 
-## Before calling v1 released
+## v1 release
+
+- [x] DataPilot v1.0.0 is released: the annotated tag `v1.0.0` exists on commit `7d336db` and has a GitHub Release.
+
+Owner readiness (personal, not code; the owner ticks this, not the repository):
 
 - [ ] The owner can explain the architecture, safety model and design decisions without notes (Phase 15; PROJECT.md §12). This needs no code.
-
-No release or tag has been made yet.
 
 ---
 
 ## Nice to have / after v1
 
-From PROJECT.md §8. Optional: none of these is needed for the v1 release, and none should be started before it.
+From PROJECT.md §8. Optional, after the v1.0.0 release: none of these was needed for it.
 
 - [x] Session-level query history in the UI (delivered as History in Phase 19, which also survives logout)
 - [ ] Schema browser panel showing the tables and columns
